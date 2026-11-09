@@ -223,3 +223,26 @@ requires restarting pagination. Counts/pagination describe the current catalog;
 restart if the catalog changes while browsing. The old top-200 facets endpoint
 remains unchanged. Consumers must adopt a published capable core before using
 the new endpoint.
+
+## Recording order
+
+Private item queries accept `sort=date_desc`, `sort=date_asc`, and
+`sort=artist_asc`; omitted order retains identifier order. Date orders include
+only complete valid dates and break equal-date ties by identifier ascending.
+Artist order uses the database lowercased creator key ascending, then identifier.
+Missing artist keys sort first. Artist order retains incomplete/unknown dates.
+All orders apply to the full filtered set before the 100-record page boundary.
+Cursors bind the collection, filters, and order; changed queries are rejected.
+The cursor carries the exact database artist key, not a consumer-derived key.
+This source change requires a published core release and explicit consumer
+adoption before consumers rely on the added orders.
+
+`TestRecordingSortPlans` explains the exact search statement on 5,001 disposable
+synthetic projections. Date orders used the existing visible-date bitmap index
+and a top-N sort; artist order used a sequential scan and top-N sort. Observed
+execution was 4.834 ms (newest), 4.246 ms (oldest), and 6.898 ms (artist), with
+533/533/501 shared buffer hits. Full matching rows are still materialized for the
+exact total, and `Search` still computes catalog status separately. These plans
+prove ordering placement and expose costs; they do not qualify production latency.
+The separately scoped loading work must measure representative corpus sizes and
+status/coverage costs before claiming the 2.5-second first-row budget.
