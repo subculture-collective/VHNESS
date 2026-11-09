@@ -16,6 +16,7 @@ func (s *Server) sourceCatalogRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/source-catalog/v1/items/{id}/source", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/facets", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/sample", s.sourceCatalog)
+	mux.HandleFunc("GET /api/source-catalog/v1/directory", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/status", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/calendar", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/artist", s.sourceCatalog)
@@ -90,6 +91,29 @@ func (s *Server) sourceCatalog(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		page, err := store.Sample(r.Context(), q)
+		if err != nil {
+			failed(err)
+			return
+		}
+		write(w, 200, page)
+		return
+	case "/api/source-catalog/v1/directory":
+		values := r.URL.Query()
+		limit := 0
+		if values.Has("limit") {
+			var err error
+			limit, err = strconv.Atoi(values.Get("limit"))
+			if err != nil || limit < 1 {
+				write(w, 400, map[string]string{"error": "use a directory limit from 1 to 100"})
+				return
+			}
+		}
+		q := sourcecatalog.DirectoryQuery{Collection: collection, Dimension: values.Get("dimension"), Search: values.Get("q"), Sort: values.Get("sort"), Cursor: values.Get("cursor"), Limit: limit}
+		if err := q.Validate(); err != nil {
+			write(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		page, err := store.Directory(r.Context(), q)
 		if err != nil {
 			failed(err)
 			return
