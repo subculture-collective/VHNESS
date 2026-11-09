@@ -206,3 +206,20 @@ collections, and `--no-archive-description` to omit the text.
 A new core release/adoption is required before consumers rely on this module.
 Do not edit an existing published receipt to advertise unreleased capability.
 The contract source includes the additive capability for the next release.
+
+## Complete directories
+
+`GET /api/source-catalog/v1/directory?collection=etree&dimension=artists`
+returns `dimension`, `q`, `sort`, `items` (value/count), `total` distinct matching
+entries and an optional `cursor`. Dimensions are `artists`, `venues`, and `years`.
+`q` is a case-insensitive substring using database lowercasing; accents are not
+folded and original spelling is retained. Counts describe all visible recordings
+in the selected collection, not the current recording-search filters. Years use
+complete valid dates only. Limits default to 50 and must be 1–100 when supplied.
+Orders are `count_desc` (value ascending for ties), `name_asc`, and `name_desc`.
+Default order is count descending for artists/venues and newest year for years.
+Cursors bind collection, dimension, query, order, and limit. Changing any of them
+requires restarting pagination. Counts/pagination describe the current catalog;
+restart if the catalog changes while browsing. The old top-200 facets endpoint
+remains unchanged. Consumers must adopt a published capable core before using
+the new endpoint.
