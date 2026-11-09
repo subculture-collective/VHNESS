@@ -15,6 +15,7 @@ func (s *Server) sourceCatalogRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/source-catalog/v1/items/{id}", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/items/{id}/source", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/facets", s.sourceCatalog)
+	mux.HandleFunc("GET /api/source-catalog/v1/sample", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/directory", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/status", s.sourceCatalog)
 	mux.HandleFunc("GET /api/source-catalog/v1/calendar", s.sourceCatalog)
@@ -67,6 +68,35 @@ func (s *Server) sourceCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.URL.Path {
+	case "/api/source-catalog/v1/sample":
+		values := r.URL.Query()
+		for key := range values {
+			if key != "collection" && key != "seed" && key != "limit" {
+				write(w, 400, map[string]string{"error": "unsupported sample parameter"})
+				return
+			}
+		}
+		limit := 0
+		if values.Has("limit") {
+			var err error
+			limit, err = strconv.Atoi(values.Get("limit"))
+			if err != nil || limit < 1 {
+				write(w, 400, map[string]string{"error": "use a sample limit from 1 to 50"})
+				return
+			}
+		}
+		q := sourcecatalog.SampleQuery{Seed: values.Get("seed"), Limit: limit}
+		if err := q.Validate(); err != nil {
+			write(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		page, err := store.Sample(r.Context(), q)
+		if err != nil {
+			failed(err)
+			return
+		}
+		write(w, 200, page)
+		return
 	case "/api/source-catalog/v1/directory":
 		values := r.URL.Query()
 		limit := 0

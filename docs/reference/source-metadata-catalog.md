@@ -246,3 +246,36 @@ exact total, and `Search` still computes catalog status separately. These plans
 prove ordering placement and expose costs; they do not qualify production latency.
 The separately scoped loading work must measure representative corpus sizes and
 status/coverage costs before claiming the 2.5-second first-row budget.
+
+## Seeded recording shelf
+
+`GET /api/source-catalog/v1/sample?collection=etree&seed=example&limit=12`
+returns `seed` and `items`, using the existing effective recording fields plus
+identifier/availability. Seed is 1–128 ASCII letters, digits, underscores or
+hyphens. Limit defaults to 12 and explicit limits are 1–50. Other parameters
+are rejected so unsupported source/date filters cannot be silently ignored.
+The endpoint is private and collection-scoped and excludes unlisted recordings.
+It does not claim playback approval: playback still uses the reviewed resolver.
+
+The additive visible hash-ring index supports two bounded index ranges, starting
+at a seed-derived anchor and wrapping once. It avoids a full-corpus random sort
+and never shuffles just the first identifier page. Membership/order are repeatable
+for unchanged visible IDs and seed; a new seed changes the anchor, but small
+collections or adjacent anchors can naturally produce the same members. Current
+visibility is checked on every read. There is no continuation, total, provider
+request, or corpus-status aggregation. Use creator with the existing attributed
+artist-media list; this endpoint invents no recording artwork or source type.
+
+Migration 0020 adds only an index. Apply it through the normal reviewed core
+migration lane, allow for index build time/locks on the real corpus, and retain
+the previous compatible binary. Do not run a host migration as a frontend deploy.
+A core release and consumer capability adoption are required before use.
+
+The disposable plan fixture contains 10,001 synthetic projection rows. The exact
+production statement uses two ranges on `source_catalog_visible_sample_idx`,
+including a forced wrap; neither plan sequentially scans the table. Only the
+selected 20 rows reach the final aggregate ordering (30 KiB sort). The observed
+local execution times were 0.195/0.159 ms with 22/24 shared buffer hits. These
+small synthetic results establish plan shape, not production latency at Lineage's
+295k-record size. Re-run with `go test ./internal/sourcecatalog -run TestSamplePlan
+-count=1 -v` and an explicitly disposable database before qualifying a release.
