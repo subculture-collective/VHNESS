@@ -103,7 +103,7 @@ func (q Query) Validate() error {
 	if err := validateDiscovery(q.MonthDay, q.YearFrom, q.YearTo); err != nil {
 		return err
 	}
-	if q.Sort != "" && q.Sort != "date_desc" {
+	if q.Sort != "" && q.Sort != "date_desc" && q.Sort != "date_asc" && q.Sort != "artist_asc" {
 		return fmt.Errorf("invalid recording order")
 	}
 	if len(q.Search) > 300 || len(q.Artist) > 300 || len(q.Venue) > 300 || len(q.Cursor) > 1024 {
@@ -132,6 +132,7 @@ type pageCursor struct {
 	After  string `json:"after"`
 	Filter string `json:"filter"`
 	Date   string `json:"date,omitempty"`
+	Artist string `json:"artist,omitempty"`
 }
 
 func (q Query) fingerprint() string {
@@ -145,7 +146,7 @@ func (q Query) after() (string, error) {
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(q.Cursor)
 	var c pageCursor
-	if err != nil || json.Unmarshal(raw, &c) != nil || !ItemID.MatchString(c.After) || c.Filter != q.fingerprint() || (q.Sort == "date_desc" && !validCompleteDate(c.Date)) {
+	if err != nil || json.Unmarshal(raw, &c) != nil || !ItemID.MatchString(c.After) || c.Filter != q.fingerprint() || ((q.Sort == "date_desc" || q.Sort == "date_asc") && !validCompleteDate(c.Date)) {
 		return "", fmt.Errorf("invalid cursor or changed filters")
 	}
 	return c.After, nil
@@ -169,31 +170,16 @@ func (s *Store) Search(ctx context.Context, q Query) (Page, error) {
 		return page, err
 	}
 	var raw []byte
-	afterDate := ""
-	if q.Cursor != "" && q.Sort == "date_desc" {
+	afterDate, afterArtist := "", ""
+	if q.Cursor != "" {
 		decoded, _ := base64.RawURLEncoding.DecodeString(q.Cursor)
 		var cursor pageCursor
 		if err := json.Unmarshal(decoded, &cursor); err != nil {
 			return page, err
 		}
-		afterDate = cursor.Date
+		afterDate, afterArtist = cursor.Date, cursor.Artist
 	}
-	err = s.Core.Pool.QueryRow(ctx, `WITH filtered AS MATERIALIZED (
- SELECT identifier,effective,unavailable FROM source_catalog_items WHERE collection_id=$9 AND NOT excluded AND
- ($1='' OR search @@ websearch_to_tsquery('simple',$1))
- AND ($2='' OR left(effective->>'date',4)=$2)
- AND ($3='' OR lower(effective->>'creator')=lower($3))
- AND ($4='' OR position(lower($4) in lower(effective->>'venue'))>0)
- AND ($5='' OR ($5='available' AND NOT unavailable) OR ($5='unavailable' AND unavailable))
- AND ($10='' OR (source_catalog_complete_date(effective->>'date') AND substring(effective->>'date',6,5)=$10))
- AND ($11='' OR left(effective->>'date',4)>=$11) AND ($12='' OR left(effective->>'date',4)<=$12)
- AND ($13='' OR source_catalog_complete_date(effective->>'date'))
- AND ($15='' OR (source_catalog_complete_date(effective->>'date') AND substring(effective->>'date',6,2)=$15))
- AND (($7='' AND $8='') OR (source_catalog_complete_date(effective->>'date') AND ($7='' OR effective->>'date'>=$7) AND ($8='' OR effective->>'date'<=$8)))
- ), selected AS (SELECT * FROM filtered WHERE
- (($13='' AND identifier>$6) OR ($13='date_desc' AND ($6='' OR effective->>'date'<$14 OR (effective->>'date'=$14 AND identifier>$6))))
- ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,identifier LIMIT 101)
- SELECT (SELECT count(*) FROM filtered),COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable) ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,identifier),'[]'::jsonb) FROM selected`, q.Search, q.Year, q.Artist, q.Venue, q.Availability, after, q.From, q.To, s.Collection, q.MonthDay, q.YearFrom, q.YearTo, q.Sort, afterDate, q.Month).Scan(&page.Total, &raw)
+	err = s.Core.Pool.QueryRow(ctx, recordingSearchSQL, q.Search, q.Year, q.Artist, q.Venue, q.Availability, after, q.From, q.To, s.Collection, q.MonthDay, q.YearFrom, q.YearTo, q.Sort, afterDate, q.Month, afterArtist).Scan(&page.Total, &raw)
 	if err != nil {
 		return page, err
 	}
@@ -203,11 +189,18 @@ func (s *Store) Search(ctx context.Context, q Query) (Page, error) {
 	if len(page.Items) > 100 {
 		page.Items = page.Items[:100]
 		cursorDate := ""
-		if q.Sort == "date_desc" {
+		if q.Sort == "date_desc" || q.Sort == "date_asc" {
 			cursorDate, _ = page.Items[99]["date"].(string)
 		}
-		cursor, _ := json.Marshal(pageCursor{After: page.Items[99]["identifier"].(string), Filter: q.fingerprint(), Date: cursorDate})
+		cursorArtist := ""
+		if q.Sort == "artist_asc" {
+			cursorArtist, _ = page.Items[99]["_cursor_artist"].(string)
+		}
+		cursor, _ := json.Marshal(pageCursor{After: page.Items[99]["identifier"].(string), Filter: q.fingerprint(), Date: cursorDate, Artist: cursorArtist})
 		page.Cursor = base64.RawURLEncoding.EncodeToString(cursor)
+	}
+	for _, item := range page.Items {
+		delete(item, "_cursor_artist")
 	}
 	page.Status, err = s.Status(ctx)
 	return page, err
@@ -313,3 +306,24 @@ func (s *Store) Facets(ctx context.Context) (map[string][]Facet, error) {
 }
 
 func ValidateCursor(q Query) error { _, err := q.after(); return err }
+
+// Shared with the disposable query-plan inspection.
+const recordingSearchSQL = `WITH filtered AS MATERIALIZED (
+ SELECT identifier,effective,unavailable FROM source_catalog_items WHERE collection_id=$9 AND NOT excluded AND
+ ($1='' OR search @@ websearch_to_tsquery('simple',$1))
+ AND ($2='' OR left(effective->>'date',4)=$2)
+ AND ($3='' OR lower(effective->>'creator')=lower($3))
+ AND ($4='' OR position(lower($4) in lower(effective->>'venue'))>0)
+ AND ($5='' OR ($5='available' AND NOT unavailable) OR ($5='unavailable' AND unavailable))
+ AND ($10='' OR (source_catalog_complete_date(effective->>'date') AND substring(effective->>'date',6,5)=$10))
+ AND ($11='' OR left(effective->>'date',4)>=$11) AND ($12='' OR left(effective->>'date',4)<=$12)
+ AND ($13 NOT IN ('date_desc','date_asc') OR source_catalog_complete_date(effective->>'date'))
+ AND ($15='' OR (source_catalog_complete_date(effective->>'date') AND substring(effective->>'date',6,2)=$15))
+ AND (($7='' AND $8='') OR (source_catalog_complete_date(effective->>'date') AND ($7='' OR effective->>'date'>=$7) AND ($8='' OR effective->>'date'<=$8)))
+ ), selected AS (SELECT * FROM filtered WHERE
+ (($13='' AND identifier>$6)
+ OR ($13='date_desc' AND ($6='' OR effective->>'date'<$14 OR (effective->>'date'=$14 AND identifier>$6)))
+ OR ($13='date_asc' AND ($6='' OR effective->>'date'>$14 OR (effective->>'date'=$14 AND identifier>$6)))
+ OR ($13='artist_asc' AND ($6='' OR lower(effective->>'creator')>$16 OR (lower(effective->>'creator')=$16 AND identifier>$6))))
+ ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,CASE WHEN $13='date_asc' THEN effective->>'date' END ASC,CASE WHEN $13='artist_asc' THEN lower(effective->>'creator') END ASC,identifier LIMIT 101)
+ SELECT (SELECT count(*) FROM filtered),COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable,'_cursor_artist',lower(effective->>'creator')) ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,CASE WHEN $13='date_asc' THEN effective->>'date' END ASC,CASE WHEN $13='artist_asc' THEN lower(effective->>'creator') END ASC,identifier),'[]'::jsonb) FROM selected`
