@@ -113,6 +113,31 @@ remains; stopping between batches is safe:
 vhness classify-source-catalog --collection etree --limit 500
 ```
 
+## Popularity snapshots
+
+Retained view counts sit apart from recording metadata and editorial history, so
+corrections and re-imports leave them untouched. Migration 0022 adds the tables.
+Each import keeps the exact provider response and its observation time, and page
+reads only read what is retained.
+
+```sh
+vhness import-source-popularity --collection etree --file batch.json
+```
+
+The batch holds `provider`, `observed_at`, up to 50 `requested` identifiers and the
+exact provider bytes as `response_base64` (at most 1 MiB). The command prints a
+report of usable, no-data, malformed and omitted identifiers.
+
+Observed zero and missing data stay different. `have_data: false` records no counts,
+and never replaces earlier counts. A malformed entry, an omitted identifier or an
+unparseable response leaves the last usable counts in place and records only the
+attempt. Counters must be nonnegative whole JSON numbers. An older batch cannot
+overwrite newer counts.
+
+Selection code reads `Store.Popularity`, which reports `fresh` for counts observed
+within 24 hours and `last_outcome` for the latest attempt. Stale records keep their
+counts, so a caller can use them as candidates without a fresh-popularity claim.
+
 ## Excluding retained recordings
 
 An operator can remove records from source-catalog browse, search, facets and

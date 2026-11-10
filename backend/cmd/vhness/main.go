@@ -47,7 +47,7 @@ func load(p string, v any) error {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: vhness migrate|collection|review-budget|review-public-video|review-library|plan-replay|import|import-item|import-source|import-source-catalog|import-source-artist|set-source-catalog-listing|edit-source-catalog|classify-source-catalog|review-source-audio|review-source-audio-batch|discover-catalog|refresh-catalog|import-catalog|prepare-curation|retain-legacy|review-transport|rebind-representation|import-labels|propose-labels|review-labels|index-print|restore-print-index|register-audio|register-video|schedule-audio|renew-public-audio|fetch|inspect|acquire|audit|review|schedule|discover|refresh|report|seed|serve|healthcheck")
+		return fmt.Errorf("usage: vhness migrate|collection|review-budget|review-public-video|review-library|plan-replay|import|import-item|import-source|import-source-catalog|import-source-artist|set-source-catalog-listing|edit-source-catalog|classify-source-catalog|import-source-popularity|review-source-audio|review-source-audio-batch|discover-catalog|refresh-catalog|import-catalog|prepare-curation|retain-legacy|review-transport|rebind-representation|import-labels|propose-labels|review-labels|index-print|restore-print-index|register-audio|register-video|schedule-audio|renew-public-audio|fetch|inspect|acquire|audit|review|schedule|discover|refresh|report|seed|serve|healthcheck")
 	}
 	cmd := os.Args[1]
 	if cmd == "healthcheck" {
@@ -171,7 +171,7 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"draft_sha256": sha, "state": "operator-review", "public": false, "transport_granted": false})
-	case "discover-catalog", "refresh-catalog", "import-source-artist", "set-source-catalog-listing", "import-source-catalog", "edit-source-catalog", "classify-source-catalog", "review-source-audio", "review-source-audio-batch":
+	case "discover-catalog", "refresh-catalog", "import-source-artist", "set-source-catalog-listing", "import-source-catalog", "edit-source-catalog", "classify-source-catalog", "import-source-popularity", "review-source-audio", "review-source-audio-batch":
 		store := &sourcecatalog.Store{Core: d, Collection: *collection}
 		if err = store.Init(ctx); err != nil {
 			return err
@@ -203,6 +203,21 @@ func run() error {
 				return e
 			}
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{"classified": classified, "remaining": remaining})
+		case "import-source-popularity":
+			input, e := os.Open(*file)
+			if e != nil {
+				return e
+			}
+			defer input.Close()
+			batch, e := sourcecatalog.DecodePopularityBatch(input)
+			if e != nil {
+				return e
+			}
+			report, e := store.ImportPopularity(ctx, batch)
+			if e != nil {
+				return e
+			}
+			return json.NewEncoder(os.Stdout).Encode(report)
 		case "set-source-catalog-listing":
 			input, e := os.Open(*file)
 			if e != nil {
