@@ -112,6 +112,7 @@ remains; stopping between batches is safe:
 ```sh
 vhness classify-source-catalog --collection etree --limit 500
 ```
+
 ## Popularity snapshots
 
 Retained view counts sit apart from recording metadata and editorial history, so
