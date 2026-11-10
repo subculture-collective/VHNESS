@@ -40,7 +40,7 @@ func TestDiscoveryQueryCosts(t *testing.T) {
 		if _, err := conn.Exec(ctx, q, args...); err != nil {
 			t.Fatalf("%s: %v", q[:60], err)
 		}
-		fmt.Printf("setup %.1fs %s\n", time.Since(t0).Seconds(), strings.Join(strings.Fields(q)[:min(3,len(strings.Fields(q)))]," "))
+		fmt.Printf("setup %.1fs %s\n", time.Since(t0).Seconds(), strings.Join(strings.Fields(q)[:min(3, len(strings.Fields(q)))], " "))
 	}
 	exec(`SELECT setseed(0.42)`)
 	exec(`INSERT INTO source_catalog_items(collection_id,identifier,source_hash,normalized,normalization,effective,search)
