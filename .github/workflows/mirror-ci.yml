@@ -1,0 +1,137 @@
+name: Mirror CI
+run-name: Mirror CI ${{ github.sha }}
+'on':
+  push:
+    branches-ignore: [main]
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: verify
+    if: github.repository == 'subculture-collective/VHNESS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vhness
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: vhness_test
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vhness -d vhness_test" --health-interval 5s --health-retries 10
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        persist-credentials: false
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      with:
+        go-version-file: backend/go.mod
+        cache: true
+        cache-dependency-path: backend/go.sum
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Install the locked pnpm
+      run: npm install --global pnpm@10.33.0
+    - name: Locate the pnpm store
+      id: pnpm-store
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-v1-${{ runner.os }}-
+    - name: Install bounded print extraction tools
+      run: |
+        sudo apt-get update -q
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends poppler-utils util-linux ffmpeg
+    - name: Verify with this job's disposable database
+      env:
+        # Hosted service containers publish on the VM loopback, not a Docker bridge address.
+        TEST_DATABASE_URL: postgres://vhness:disposable-ci-only@127.0.0.1:5432/vhness_test?sslmode=disable
+      run: make verify
+  images:
+    name: Curation and SEO images
+    if: github.repository == 'subculture-collective/VHNESS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SOURCE_REVISION: ${{ github.sha }}
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Verify copied discovery, curation and recovery workflows
+      run: |
+        set -euo pipefail
+        node --check curation/arkhiv_curation/static/app.js
+        docker build --target verify -f curation/Dockerfile curation
+    - name: Build independent curation runtime
+      run: |
+        set -euo pipefail
+        image="arkhiv-curation-check:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        name="arkhiv-curation-check-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        docker build --target runtime --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" -f curation/Dockerfile curation
+        trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+        docker run -d --name "$name" --read-only --tmpfs /app/data:uid=1000,gid=1000,mode=0700 --tmpfs /tmp:uid=1000,gid=1000,mode=0700 --cap-drop ALL --security-opt no-new-privileges "$image"
+        for _ in $(seq 1 30); do
+          if docker exec "$name" /app/.venv/bin/python -c 'import json,urllib.request; r=json.load(urllib.request.urlopen("http://127.0.0.1:18764/api/health")); assert r["worker_alive"]'; then
+            exit 0
+          fi
+          sleep 1
+        done
+        docker logs "$name"
+        exit 1
+    - name: Install the locked pnpm
+      run: npm install --global pnpm@10.33.0
+    - name: Locate the pnpm store
+      id: pnpm-store
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-v1-${{ runner.os }}-
+    - name: Build and check the SEO frontend image
+      run: |
+        set -euo pipefail
+        test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+        image="fleet-deploy/arkhiv-seo/web:$SOURCE_REVISION"
+        pnpm install --frozen-lockfile
+        pnpm --dir web build
+        pnpm --dir web seo:render public/site.json https://arkhiv.subcult.tv/
+        docker build --build-arg "SOURCE_REVISION=$SOURCE_REVISION" -f web/Dockerfile.static \
+          --label "org.opencontainers.image.revision=$SOURCE_REVISION" \
+          --label "org.opencontainers.image.source=https://git.subcult.tv/subculture-collective/arkhiv" -t "$image" web
+        ARKHIV_SEO_IMAGE="$image" docker compose -f deploy/seo-compose.yml config --quiet
+        bash scripts/check-seo-image.sh "$image"
+  mirror-gate:
+    name: Mirror CI gate
+    if: always() && github.repository == 'subculture-collective/VHNESS'
+    needs:
+    - verify
+    - images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+    - name: Require every verification job
+      env:
+        RESULTS: ${{ toJSON(needs) }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        results = json.loads(os.environ["RESULTS"])
+        expected = {'verify', 'images'}
+        assert set(results) == expected, results
+        for name, result in results.items():
+            assert result["result"] == "success", name + " did not pass"
+        PY

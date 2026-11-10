@@ -2,14 +2,18 @@ name: curation
 on:
   push:
     branches: [main]
-  pull_request:
+    # The job reads only the curation build context and this workflow.
+    paths:
+      - curation/**
+      - .gitea/workflows/curation.yml
+  # Pull-request verification runs on the GitHub mirror (.github/workflows/mirror-ci.yml).
   workflow_dispatch:
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   verify-curation:

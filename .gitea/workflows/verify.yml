@@ -8,13 +8,15 @@ on:
         default: ubuntu-latest
   push:
     branches: [main]
-  pull_request:
+# Pull-request verification runs on the GitHub mirror (.github/workflows/mirror-ci.yml);
+# Gitea reports it as "GitHub CI / Mirror CI gate".
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # The seo job deploys Almaz; never cancel a main run part-way through.
+  cancel-in-progress: false
 
 jobs:
   verify:
