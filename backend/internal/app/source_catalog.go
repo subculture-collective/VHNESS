@@ -206,7 +206,7 @@ func (s *Server) sourceCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	values := r.URL.Query()
-	q := sourcecatalog.Query{Collection: collection, Search: values.Get("q"), Year: values.Get("year"), Artist: values.Get("artist"), Venue: values.Get("venue"), Availability: values.Get("availability"), Cursor: values.Get("cursor"), From: values.Get("date_from"), To: values.Get("date_to"), MonthDay: values.Get("month_day"), YearFrom: values.Get("year_from"), YearTo: values.Get("year_to"), Sort: values.Get("sort"), Month: values.Get("month")}
+	q := sourcecatalog.Query{Collection: collection, Search: values.Get("q"), Year: values.Get("year"), Artist: values.Get("artist"), Venue: values.Get("venue"), Availability: values.Get("availability"), Cursor: values.Get("cursor"), From: values.Get("date_from"), To: values.Get("date_to"), MonthDay: values.Get("month_day"), YearFrom: values.Get("year_from"), YearTo: values.Get("year_to"), Sort: values.Get("sort"), Month: values.Get("month"), SourceType: values.Get("source_type")}
 	if err := q.Validate(); err != nil {
 		write(w, 400, map[string]string{"error": err.Error()})
 		return
