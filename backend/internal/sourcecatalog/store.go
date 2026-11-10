@@ -94,7 +94,12 @@ func (s *Store) Edit(ctx context.Context, id string, patch map[string]any, notes
 	return tx.Commit(ctx)
 }
 
-type Query struct{ Search, Year, Artist, Venue, Availability, Cursor, From, To, Collection, MonthDay, YearFrom, YearTo, Sort, Month string }
+// SourceType stays out of the JSON when empty so that a cursor issued to a
+// client which never sends it keeps the same filter fingerprint.
+type Query struct {
+	Search, Year, Artist, Venue, Availability, Cursor, From, To, Collection, MonthDay, YearFrom, YearTo, Sort, Month string
+	SourceType                                                                                                       string `json:",omitempty"`
+}
 
 func (q Query) Validate() error {
 	if q.Month != "" && !regexpMonth.MatchString(q.Month) {
@@ -111,6 +116,9 @@ func (q Query) Validate() error {
 	}
 	if q.Year != "" && !Year.MatchString(q.Year) {
 		return fmt.Errorf("use a four-digit year")
+	}
+	if q.SourceType != "" && !SourceTypes[q.SourceType] {
+		return fmt.Errorf("invalid recording source type")
 	}
 	if q.Availability != "" && q.Availability != "available" && q.Availability != "unavailable" {
 		return fmt.Errorf("invalid availability filter")
@@ -179,7 +187,7 @@ func (s *Store) Search(ctx context.Context, q Query) (Page, error) {
 		}
 		afterDate, afterArtist = cursor.Date, cursor.Artist
 	}
-	err = s.Core.Pool.QueryRow(ctx, recordingSearchSQL, q.Search, q.Year, q.Artist, q.Venue, q.Availability, after, q.From, q.To, s.Collection, q.MonthDay, q.YearFrom, q.YearTo, q.Sort, afterDate, q.Month, afterArtist).Scan(&page.Total, &raw)
+	err = s.Core.Pool.QueryRow(ctx, recordingSearchSQL, q.Search, q.Year, q.Artist, q.Venue, q.Availability, after, q.From, q.To, s.Collection, q.MonthDay, q.YearFrom, q.YearTo, q.Sort, afterDate, q.Month, afterArtist, q.SourceType).Scan(&page.Total, &raw)
 	if err != nil {
 		return page, err
 	}
@@ -206,13 +214,14 @@ func (s *Store) Search(ctx context.Context, q Query) (Page, error) {
 	return page, err
 }
 func (s *Store) Detail(ctx context.Context, id string) (map[string]any, error) {
-	var source, effective, normalized, editorial, rules, history []byte
-	var hash string
+	var source, effective, normalized, editorial, rules, history, sourceEvidence []byte
+	var hash, sourceType string
+	var sourceVersion int
 	var updated time.Time
 	var unavailable, excluded bool
-	err := s.Core.Pool.QueryRow(ctx, `SELECT s.parsed,r.effective,r.normalized,r.editorial,r.normalization,r.source_hash,r.updated_at,r.unavailable,r.excluded,
+	err := s.Core.Pool.QueryRow(ctx, `SELECT s.parsed,r.effective,r.normalized,r.editorial,r.normalization,r.source_hash,r.updated_at,r.unavailable,r.excluded,r.source_type,r.source_type_version,r.source_type_evidence,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('patch',h.patch,'notes',h.notes,'created_at',h.created_at) ORDER BY h.id DESC) FROM (SELECT * FROM source_catalog_history WHERE collection_id=r.collection_id AND item_id=r.identifier ORDER BY id DESC LIMIT 20) h),'[]'::jsonb)
- FROM source_catalog_items r JOIN snapshots s ON s.sha256=r.source_hash WHERE r.collection_id=$1 AND r.identifier=$2`, s.Collection, id).Scan(&source, &effective, &normalized, &editorial, &rules, &hash, &updated, &unavailable, &excluded, &history)
+ FROM source_catalog_items r JOIN snapshots s ON s.sha256=r.source_hash WHERE r.collection_id=$1 AND r.identifier=$2`, s.Collection, id).Scan(&source, &effective, &normalized, &editorial, &rules, &hash, &updated, &unavailable, &excluded, &sourceType, &sourceVersion, &sourceEvidence, &history)
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +239,8 @@ func (s *Store) Detail(ctx context.Context, id string) (map[string]any, error) {
 	result["updated_at"] = updated
 	result["unavailable"] = unavailable
 	result["excluded"] = excluded
+	result["source_type"] = sourceType
+	result["source_classification"] = map[string]any{"version": sourceVersion, "pending": sourceVersion == 0, "evidence": json.RawMessage(sourceEvidence)}
 	var bindings []byte
 	err = s.Core.Pool.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object('item',r.item_id,'representation',r.id,'files',t.review->'files')),'[]'::jsonb)
  FROM catalog_representations r JOIN representation_transport_reviews t ON t.item_id=r.item_id AND t.representation_id=r.id AND t.collection_id=$1
@@ -309,7 +320,7 @@ func ValidateCursor(q Query) error { _, err := q.after(); return err }
 
 // Shared with the disposable query-plan inspection.
 const recordingSearchSQL = `WITH filtered AS MATERIALIZED (
- SELECT identifier,effective,unavailable FROM source_catalog_items WHERE collection_id=$9 AND NOT excluded AND
+ SELECT identifier,effective,unavailable,source_type FROM source_catalog_items WHERE collection_id=$9 AND NOT excluded AND
  ($1='' OR search @@ websearch_to_tsquery('simple',$1))
  AND ($2='' OR left(effective->>'date',4)=$2)
  AND ($3='' OR lower(effective->>'creator')=lower($3))
@@ -319,6 +330,7 @@ const recordingSearchSQL = `WITH filtered AS MATERIALIZED (
  AND ($11='' OR left(effective->>'date',4)>=$11) AND ($12='' OR left(effective->>'date',4)<=$12)
  AND ($13 NOT IN ('date_desc','date_asc') OR source_catalog_complete_date(effective->>'date'))
  AND ($15='' OR (source_catalog_complete_date(effective->>'date') AND substring(effective->>'date',6,2)=$15))
+ AND ($17='' OR source_type=$17)
  AND (($7='' AND $8='') OR (source_catalog_complete_date(effective->>'date') AND ($7='' OR effective->>'date'>=$7) AND ($8='' OR effective->>'date'<=$8)))
  ), selected AS (SELECT * FROM filtered WHERE
  (($13='' AND identifier>$6)
@@ -326,4 +338,4 @@ const recordingSearchSQL = `WITH filtered AS MATERIALIZED (
  OR ($13='date_asc' AND ($6='' OR effective->>'date'>$14 OR (effective->>'date'=$14 AND identifier>$6)))
  OR ($13='artist_asc' AND ($6='' OR lower(effective->>'creator')>$16 OR (lower(effective->>'creator')=$16 AND identifier>$6))))
  ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,CASE WHEN $13='date_asc' THEN effective->>'date' END ASC,CASE WHEN $13='artist_asc' THEN lower(effective->>'creator') END ASC,identifier LIMIT 101)
- SELECT (SELECT count(*) FROM filtered),COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable,'_cursor_artist',lower(effective->>'creator')) ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,CASE WHEN $13='date_asc' THEN effective->>'date' END ASC,CASE WHEN $13='artist_asc' THEN lower(effective->>'creator') END ASC,identifier),'[]'::jsonb) FROM selected`
+ SELECT (SELECT count(*) FROM filtered),COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable,'source_type',source_type,'_cursor_artist',lower(effective->>'creator')) ORDER BY CASE WHEN $13='date_desc' THEN effective->>'date' END DESC,CASE WHEN $13='date_asc' THEN effective->>'date' END ASC,CASE WHEN $13='artist_asc' THEN lower(effective->>'creator') END ASC,identifier),'[]'::jsonb) FROM selected`
