@@ -47,7 +47,7 @@ func load(p string, v any) error {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: vhness migrate|collection|review-budget|review-public-video|review-library|plan-replay|import|import-item|import-source|import-source-catalog|import-source-artist|set-source-catalog-listing|edit-source-catalog|import-source-popularity|review-source-audio|review-source-audio-batch|discover-catalog|refresh-catalog|import-catalog|prepare-curation|retain-legacy|review-transport|rebind-representation|import-labels|propose-labels|review-labels|index-print|restore-print-index|register-audio|register-video|schedule-audio|renew-public-audio|fetch|inspect|acquire|audit|review|schedule|discover|refresh|report|seed|serve|healthcheck")
+		return fmt.Errorf("usage: vhness migrate|collection|review-budget|review-public-video|review-library|plan-replay|import|import-item|import-source|import-source-catalog|import-source-artist|set-source-catalog-listing|edit-source-catalog|classify-source-catalog|import-source-popularity|review-source-audio|review-source-audio-batch|discover-catalog|refresh-catalog|import-catalog|prepare-curation|retain-legacy|review-transport|rebind-representation|import-labels|propose-labels|review-labels|index-print|restore-print-index|register-audio|register-video|schedule-audio|renew-public-audio|fetch|inspect|acquire|audit|review|schedule|discover|refresh|report|seed|serve|healthcheck")
 	}
 	cmd := os.Args[1]
 	if cmd == "healthcheck" {
@@ -88,6 +88,7 @@ func run() error {
 	after := f.String("after-id", "", "bounded library review cursor")
 	days := f.Int("days", 7, "explicit replay horizon, 1 through 7 days")
 	hours := f.Int("hours", 168, "public audio renewal horizon, 1 through 168 hours")
+	limit := f.Int("limit", 500, "bounded records per classification batch (1–5000)")
 	pages := f.Int("pages", 1, "bounded discovery pages (0–100)")
 	items := f.Int("items", 20, "bounded metadata fetches (0–1000)")
 	delay := f.Duration("delay", time.Second, "minimum interval between metadata-only catalog requests")
@@ -170,7 +171,7 @@ func run() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"draft_sha256": sha, "state": "operator-review", "public": false, "transport_granted": false})
-	case "discover-catalog", "refresh-catalog", "import-source-artist", "set-source-catalog-listing", "import-source-catalog", "edit-source-catalog", "import-source-popularity", "review-source-audio", "review-source-audio-batch":
+	case "discover-catalog", "refresh-catalog", "import-source-artist", "set-source-catalog-listing", "import-source-catalog", "edit-source-catalog", "classify-source-catalog", "import-source-popularity", "review-source-audio", "review-source-audio-batch":
 		store := &sourcecatalog.Store{Core: d, Collection: *collection}
 		if err = store.Init(ctx); err != nil {
 			return err
@@ -193,6 +194,15 @@ func run() error {
 				return fmt.Errorf("expected one artist bundle")
 			}
 			return store.ImportArtist(ctx, *artist, bundle, *notes)
+		case "classify-source-catalog":
+			if *limit < 1 || *limit > 5000 {
+				return fmt.Errorf("use a classification batch from 1 to 5000")
+			}
+			classified, remaining, e := store.ClassifyBatch(ctx, *limit)
+			if e != nil {
+				return e
+			}
+			return json.NewEncoder(os.Stdout).Encode(map[string]any{"classified": classified, "remaining": remaining})
 		case "import-source-popularity":
 			input, e := os.Open(*file)
 			if e != nil {

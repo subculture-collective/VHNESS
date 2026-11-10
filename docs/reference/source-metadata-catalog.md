@@ -84,6 +84,34 @@ retained. Old consumers use their existing APIs. Core 0.4.0 introduced this modu
 core 0.4.1 adds batch playback review and nested source audio. Package updates and public
 rollout remain separate release decisions.
 
+## Recording source type
+
+`source_type` is one of `soundboard`, `audience`, `matrix`, `fm_radio`, `other` or
+`unknown`. Item lists, the sample and detail responses all carry it, and
+`GET /api/source-catalog/v1/items?source_type=soundboard` filters on the same
+stored projection, so totals and pagination agree. Modules advertise
+`source_classification: 1`.
+
+Only the effective `source` and `lineage` fields are evidence. Explicit labels such
+as SBD, AUD, Matrix and FM count. File format, file-inventory `source` values,
+microphone or deck names and audio quality do not. A matrix may also name its
+soundboard and audience parts. **Unknown** covers missing evidence, conflicting
+labels and hedged or negated labels such as "SBD?" or "not a soundboard".
+**Other** requires positive evidence, such as a webcast or TV broadcast.
+
+The database recomputes the projection on every write to a record, including
+imports and corrections, using the effective fields. A reviewed classification is
+an editorial `source_type` correction: it overrides the rules and survives
+re-import. Detail responses report `source_classification` with its version,
+evidence (reason, fields and labels) and whether it is still pending.
+
+Migration 0021 adds the columns without rewriting rows, and existing records read
+`unknown` until classified. Run the bounded, resumable backfill until nothing
+remains; stopping between batches is safe:
+
+```sh
+vhness classify-source-catalog --collection etree --limit 500
+```
 ## Popularity snapshots
 
 Retained view counts sit apart from recording metadata and editorial history, so

@@ -25,7 +25,8 @@ type Normalization struct {
 }
 
 // Preserve the supplied raw bytes separately. Normalization makes no claims
-// about source type, concert identity or set boundaries.
+// about concert identity or set boundaries. Source type is projected from the
+// effective fields by the database, so corrections and re-imports share it.
 func Normalize(collection, id string, raw []byte) (map[string]string, Normalization, error) {
 	n := Normalization{Version: "live-music-v1", Warnings: []string{}, Derived: map[string]string{}}
 	var snapshot Snapshot
@@ -134,7 +135,10 @@ func PlainText(value string) string {
 	}
 }
 
-var editable = map[string]bool{"title": true, "creator": true, "date": true, "venue": true, "coverage": true, "description": true, "source": true, "lineage": true, "taper": true, "transferer": true, "subject": true}
+// SourceTypes are the recording source classifications a filter can select.
+var SourceTypes = map[string]bool{"soundboard": true, "audience": true, "matrix": true, "fm_radio": true, "other": true, "unknown": true}
+
+var editable = map[string]bool{"source_type": true, "title": true, "creator": true, "date": true, "venue": true, "coverage": true, "description": true, "source": true, "lineage": true, "taper": true, "transferer": true, "subject": true}
 
 func ValidatePatch(patch map[string]any, notes string) error {
 	if patch == nil || len(patch) == 0 || len(patch) > len(editable) || len(strings.TrimSpace(notes)) == 0 || len(notes) > 4000 {
@@ -150,6 +154,9 @@ func ValidatePatch(patch map[string]any, notes string) error {
 		s, ok := value.(string)
 		if !ok || len(s) > 16000 {
 			return fmt.Errorf("field %q requires bounded text or null", key)
+		}
+		if key == "source_type" && !SourceTypes[s] {
+			return fmt.Errorf("use a known source type")
 		}
 		if key == "title" && strings.TrimSpace(s) == "" {
 			return fmt.Errorf("title must not be blank")

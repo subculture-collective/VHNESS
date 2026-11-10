@@ -140,7 +140,7 @@ func TestRecordingSortPlans(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, order := range []string{"date_desc", "date_asc", "artist_asc"} {
-		rows, err := s.Core.Pool.Query(ctx, "EXPLAIN (ANALYZE,BUFFERS) "+recordingSearchSQL, "", "", "", "", "", "", "", "", s.Collection, "", "", "", order, "", "", "")
+		rows, err := s.Core.Pool.Query(ctx, "EXPLAIN (ANALYZE,BUFFERS) "+recordingSearchSQL, "", "", "", "", "", "", "", "", s.Collection, "", "", "", order, "", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -56,13 +56,13 @@ func (s *Store) Sample(ctx context.Context, q SampleQuery) (SamplePage, error) {
 
 // Kept as the exact production statement so the disposable plan check exercises it.
 const sampleSQL = `WITH tail AS MATERIALIZED (
- SELECT identifier,effective,unavailable,md5(identifier) AS sample_key,0 AS wrapped
+ SELECT identifier,effective,unavailable,source_type,md5(identifier) AS sample_key,0 AS wrapped
  FROM source_catalog_items WHERE collection_id=$1 AND NOT excluded AND md5(identifier)>=$2
  ORDER BY md5(identifier),identifier LIMIT $3
  ), head AS (
- SELECT identifier,effective,unavailable,md5(identifier) AS sample_key,1 AS wrapped
+ SELECT identifier,effective,unavailable,source_type,md5(identifier) AS sample_key,1 AS wrapped
  FROM source_catalog_items WHERE collection_id=$1 AND NOT excluded AND md5(identifier)<$2
  ORDER BY md5(identifier),identifier LIMIT ($3-(SELECT count(*) FROM tail))
  ), selected AS (SELECT * FROM tail UNION ALL SELECT * FROM head)
- SELECT COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable)
+ SELECT COALESCE(jsonb_agg(effective || jsonb_build_object('identifier',identifier,'unavailable',unavailable,'source_type',source_type)
  ORDER BY wrapped,sample_key,identifier),'[]'::jsonb) FROM selected`
