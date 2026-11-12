@@ -8,7 +8,7 @@ It preserves source metadata, editorial history, reviewed access decisions,
 media identities, search indexes, and shared playback schedules.
 
 The branded apps own their frontend source, design, and deployment in separate
-repositories: Anarchist Archive (`arkhiv-alpha`), Riot Grrrl Zine Archive,
+repositories: Anarchist Archive (`arkhiv-anarchist`), Riot Grrrl Zine Archive,
 Dedhed, Bill Nye TV, and Democracy Now! TV. Arkhiv supplies a versioned headless
 engine and optional shared viewer components. Updating the engine does not
 replace a brand's interface.

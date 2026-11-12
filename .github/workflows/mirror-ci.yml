@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     name: verify
-    if: github.repository == 'subculture-collective/VHNESS'
+    if: github.repository == 'subculture-collective/arkhiv'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -58,7 +58,7 @@ jobs:
       run: make verify
   images:
     name: Curation and SEO images
-    if: github.repository == 'subculture-collective/VHNESS'
+    if: github.repository == 'subculture-collective/arkhiv'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -116,7 +116,7 @@ jobs:
         bash scripts/check-seo-image.sh "$image"
   mirror-gate:
     name: Mirror CI gate
-    if: always() && github.repository == 'subculture-collective/VHNESS'
+    if: always() && github.repository == 'subculture-collective/arkhiv'
     needs:
     - verify
     - images
