@@ -7,6 +7,7 @@ website rules are in Studio (`studio/brands/arkhiv/WEBSITE.md`).
 
 - `public/` is copied as-is into the image. There is no build step and no
   JavaScript; light and dark follow the visitor's system setting.
+- `og.png` is the Studio pack's `product/og.png` (subcult-tv `studio/brands/arkhiv`); replace it from there, never by hand.
 - Fonts are the Studio pack's Newsreader 700, Public Sans 400/700 and IBM Plex
   Mono 400, with their OFL licences beside them.
 - Facts in the copy come from this repository and each archive's own
