@@ -44,8 +44,8 @@ frontends. Production rollout, owner audiovisual review, and natural operation
 are separate evidence. See [development instructions](DEVELOPMENT.md),
 [deployment operations](docs/DEPLOYMENT.md), and the [roadmap](ROADMAP.md).
 
-The public SEO frontend has its own
-[main CI deployment procedure](docs/runbooks/seo-ci-deployment.md).
+The public product page at <https://arkhiv.subcult.tv/> is static and lives in
+`site/`; it has its own [main CI deployment procedure](docs/runbooks/seo-ci-deployment.md).
 
 The upcoming core 0.4.0 adds a [source metadata catalog](docs/reference/source-metadata-catalog.md)
 with cursor discovery, complete snapshot retention, local search and filters, and

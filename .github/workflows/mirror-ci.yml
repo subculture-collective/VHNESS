@@ -91,27 +91,14 @@ jobs:
         done
         docker logs "$name"
         exit 1
-    - name: Install the locked pnpm
-      run: npm install --global pnpm@10.33.0
-    - name: Locate the pnpm store
-      id: pnpm-store
-      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-      with:
-        path: ${{ steps.pnpm-store.outputs.path }}
-        key: pnpm-store-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-        restore-keys: pnpm-store-v1-${{ runner.os }}-
-    - name: Build and check the SEO frontend image
+    - name: Build and check the product page image
       run: |
         set -euo pipefail
         test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
         image="fleet-deploy/arkhiv-seo/web:$SOURCE_REVISION"
-        pnpm install --frozen-lockfile
-        pnpm --dir web build
-        pnpm --dir web seo:render public/site.json https://arkhiv.subcult.tv/
-        docker build --build-arg "SOURCE_REVISION=$SOURCE_REVISION" -f web/Dockerfile.static \
+        docker build --build-arg "SOURCE_REVISION=$SOURCE_REVISION" -f site/Dockerfile \
           --label "org.opencontainers.image.revision=$SOURCE_REVISION" \
-          --label "org.opencontainers.image.source=https://git.subcult.tv/subculture-collective/arkhiv" -t "$image" web
+          --label "org.opencontainers.image.source=https://git.subcult.tv/subculture-collective/arkhiv" -t "$image" site
         ARKHIV_SEO_IMAGE="$image" docker compose -f deploy/seo-compose.yml config --quiet
         bash scripts/check-seo-image.sh "$image"
   mirror-gate:
