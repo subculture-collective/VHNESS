@@ -70,6 +70,13 @@ commit. Every activation checks runtime configuration and complete public HTML,
 icons and preview bytes, with immutable-image rollback on failure. The CI job
 independently compares public HTML and the favicon after activation.
 
+Because the comparison is byte for byte, the page must not contain an email
+address. Cloudflare obfuscates email addresses in subcult.tv HTML, so the live
+page would differ from the image and the receiver would roll back. That happened
+to the first two deploys on 13 November 2026. `scripts/check-seo-image.sh`
+rejects an image whose `/` or `/404.html` contains one; link to
+<https://subcult.tv/contact> instead.
+
 Use the exact rollback argv from the relevant private receipt only after checking
 for newer deployments and host changes. Keep the referenced image and baseline.
 Core/API/database, curation workers, media acquisition, source-streaming policy,

@@ -22,6 +22,15 @@ grep -Fq 'name="twitter:card" content="summary_large_image"' <<< "$html"
 for site in anarchist-archive riot-grrrl cla lineage dedhed bill-nye democracy-now; do
   grep -Fq "href=\"https://$site.subcult.tv/\"" <<< "$html"
 done
+# Cloudflare rewrites email addresses in HTML, so the live page would no longer
+# match the image and the Almaz receiver would roll the deploy back.
+for page in / /404.html; do
+  if docker exec "$fixture" wget -q -T 2 -O - "http://127.0.0.1:8080$page" 2>/dev/null \
+    | grep -Eq '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]'; then
+    echo "$page must not contain an email address" >&2
+    exit 1
+  fi
+done
 for path in favicon.ico favicon.svg apple-touch-icon.png og.png site.css fonts/newsreader-700.woff2 fonts/public-sans-400.woff2; do
   docker exec "$fixture" wget -q -T 2 -O /dev/null "http://127.0.0.1:8080/$path"
 done
