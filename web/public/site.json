@@ -5,13 +5,15 @@
   "kicker": "INTERNET ARCHIVE COLLECTIONS",
   "headline": "An archive across formats.",
   "description": "Browse collections, read documents, and play recordings. Each item keeps its source context.",
+  "logo": "/mark.svg",
   "colors": {
-    "background": "#14191e",
-    "surface": "#1e262e",
-    "ink": "#f5f2e9",
-    "muted": "#b9c1c8",
-    "accent": "#ebd59b",
-    "border": "#42505c"
+    "background": "#f3efe4",
+    "surface": "#e7e1d1",
+    "ink": "#1a1816",
+    "muted": "#57524b",
+    "accent": "#d8262c",
+    "border": "#857f72",
+    "label": "#2b59c3"
   },
   "interface": "catalog",
   "preview": {

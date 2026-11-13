@@ -108,6 +108,7 @@ export default function MixedArchive({brand}: {brand:Brand}) {
   useEffect(()=> {
     document.title = `${brand.title} — ${brand.headline}`;
     for (const [key,color] of Object.entries(brand.colors)) document.documentElement.style.setProperty(`--${key}`,color);
+    document.documentElement.style.setProperty('--label', brand.colors.label ?? brand.colors.accent);
   },[brand]);
   useEffect(()=> {
     const controller = new AbortController();
