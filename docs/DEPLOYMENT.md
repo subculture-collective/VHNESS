@@ -45,14 +45,18 @@ operator UID/GID for owned files. Keep secrets outside Git and never reuse a
 pilot password in another product.
 
 For the white-label app, copy `web/public/site.json` outside Git and change its
-name, subtitle, collection, headline, description, and six color tokens. Supply
+name, subtitle, collection, headline, description, and six color tokens. An
+optional seventh token, `label`, colors small labels; without it they use the
+accent. Supply
 `--brand /absolute/site.json` to `prepare`. Optionally provide `--brand-assets
 /absolute/assets` and a logo path such as `/brand/logo.svg`. The mounts are
 read-only. Configuration accepts bounded text, hex colors, and local asset
 paths. The collection must match the engine instance. Check rendered text and
 focus contrast after changing tokens; valid syntax does not prove accessibility.
 
-The default identity stays generic while VHNESS's name and design are undecided.
+The default identity is Arkhiv's Studio pack: its palette, Newsreader, Public
+Sans and IBM Plex Mono (served from `web/public/fonts/`), and the mark in the
+header. See `brand/README.md`.
 
 ## Operator commands and schedules
 

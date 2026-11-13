@@ -2,7 +2,7 @@ export type Brand = {
   interface?: 'video' | 'catalog';
   title: string; subtitle: string; collection: string; kicker: string;
   headline: string; description: string; logo?: string;
-  colors: { background: string; surface: string; ink: string; muted: string; accent: string; border: string };
+  colors: { background: string; surface: string; ink: string; muted: string; accent: string; border: string; label?: string };
 };
 export type EngineCapabilities = {api_version:string;collection:string;collections?:string[];modules?:Record<string,string>};
 export function checkEngine(brand: Brand, engine: EngineCapabilities): void {
@@ -22,6 +22,7 @@ export function parseBrand(input: unknown): Brand {
   for (const key of ['background', 'surface', 'ink', 'muted', 'accent', 'border'] as const) {
     if (!/^#[0-9a-fA-F]{6}$/.test(value.colors?.[key] || '')) throw new Error(`Invalid site color ${key}.`);
   }
+  if (value.colors.label !== undefined && !/^#[0-9a-fA-F]{6}$/.test(value.colors.label)) throw new Error('Invalid site color label.');
   if (value.logo && (!/^\/[A-Za-z0-9_./-]+$/.test(value.logo) || value.logo.startsWith('//') || value.logo.includes('..'))) throw new Error('Logo must be a local asset path.');
   return value;
 }

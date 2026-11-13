@@ -15,5 +15,5 @@ test('engine compatibility retains video v1 and requires mixed module capabiliti
   expect(()=>checkEngine(catalog,{api_version:'1',collection:'',collections:['mixed'],modules:{catalog:'1',print:'1',audio:'1',video:'1'}})).not.toThrow();
 });
 test('configuration rejects CSS injection, external logos and invalid identity', () => {
-  for (const invalid of [{ ...valid, colors: { ...valid.colors, accent: 'red;display:none' } }, { ...valid, logo: '//example.com/a.svg' }, { ...valid, logo: '/assets/../private.svg' }, { ...valid, collection: '../collection' }, { ...valid, title: '' }]) expect(() => parseBrand(invalid)).toThrow();
+  for (const invalid of [{ ...valid, colors: { ...valid.colors, accent: 'red;display:none' } }, { ...valid, colors: { ...valid.colors, label: 'blue' } }, { ...valid, logo: '//example.com/a.svg' }, { ...valid, logo: '/assets/../private.svg' }, { ...valid, collection: '../collection' }, { ...valid, title: '' }]) expect(() => parseBrand(invalid)).toThrow();
 });
