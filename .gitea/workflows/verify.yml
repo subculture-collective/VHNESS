@@ -90,7 +90,7 @@ jobs:
           echo "published $(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")"
 
   seo:
-    name: Build SEO frontend and deploy Almaz
+    name: Build the product page and deploy Almaz
     needs: verify
     # Homelab deploy keys accept only Kvant's address (Kvant and its Kuznya VM); the kvant label keeps this job off Buran.
     runs-on: [ubuntu-latest, kvant]
@@ -137,13 +137,6 @@ jobs:
           PYCODE
       - name: Verify the owned curation gate
         run: docker build --target verify -f curation/Dockerfile curation
-      - uses: actions/setup-node@v4
-        if: steps.artifact.outputs.available != 'true'
-        with:
-          node-version: '24'
-      - name: Install the locked frontend toolchain
-        if: steps.artifact.outputs.available != 'true'
-        run: npm install --global pnpm@10.33.0 --force
       - name: Build deployable images from the verified revision
         if: steps.artifact.outputs.available != 'true'
         shell: bash
@@ -151,12 +144,9 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_REVISION"
           image="fleet-deploy/arkhiv-seo/web:$DEPLOY_REVISION"
-          pnpm install --frozen-lockfile
-          pnpm --dir web build
-          pnpm --dir web seo:render public/site.json https://arkhiv.subcult.tv/
-          docker build --build-arg "SOURCE_REVISION=$DEPLOY_REVISION" -f web/Dockerfile.static \
+          docker build --build-arg "SOURCE_REVISION=$DEPLOY_REVISION" -f site/Dockerfile \
             --label "org.opencontainers.image.revision=$DEPLOY_REVISION" \
-            --label "org.opencontainers.image.source=https://git.subcult.tv/subculture-collective/arkhiv" -t "$image" web
+            --label "org.opencontainers.image.source=https://git.subcult.tv/subculture-collective/arkhiv" -t "$image" site
           ARKHIV_SEO_IMAGE="$image" docker compose -f deploy/seo-compose.yml config --quiet
           bash scripts/check-seo-image.sh "$image"
       - name: Deploy the built image and verify public HTML
@@ -201,5 +191,5 @@ jobs:
           test "$actual" = "$expected"
           curl --fail --silent --show-error --retry 4 --retry-all-errors \
             --max-time 30 https://arkhiv.subcult.tv/favicon.ico > "$deploy_dir/favicon"
-          cmp web/public/favicon.ico "$deploy_dir/favicon"
+          cmp site/public/favicon.ico "$deploy_dir/favicon"
           printf 'Live HTML matches the image built from %s\n' "$DEPLOY_REVISION"

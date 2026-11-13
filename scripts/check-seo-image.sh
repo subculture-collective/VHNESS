@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Checks the static Arkhiv product page image (site/) before it is deployed.
 set -euo pipefail
 image=${1:?image is required}
 docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m \
@@ -15,9 +16,17 @@ for _attempt in {1..20}; do
   sleep 0.2
 done
 html=$(docker exec "$fixture" wget -q -T 2 -O - http://127.0.0.1:8080/)
-grep -Fq 'An archive across formats.' <<< "$html"
+grep -Fq 'Seven archives with their own names.' <<< "$html"
 grep -Fq 'href="https://arkhiv.subcult.tv/"' <<< "$html"
 grep -Fq 'name="twitter:card" content="summary_large_image"' <<< "$html"
-for path in favicon.ico apple-touch-icon.png og.png site.json; do
+for site in anarchist-archive riot-grrrl cla lineage dedhed bill-nye democracy-now; do
+  grep -Fq "href=\"https://$site.subcult.tv/\"" <<< "$html"
+done
+for path in favicon.ico favicon.svg apple-touch-icon.png og.png site.css fonts/newsreader-700.woff2 fonts/public-sans-400.woff2; do
   docker exec "$fixture" wget -q -T 2 -O /dev/null "http://127.0.0.1:8080/$path"
 done
+# Retired catalog paths answer 404 with the page's own notice, not the old interface.
+if docker exec "$fixture" wget -q -T 2 -O /dev/null http://127.0.0.1:8080/documents/retired-catalog-path 2>/dev/null; then
+  echo "unknown paths must return 404" >&2
+  exit 1
+fi

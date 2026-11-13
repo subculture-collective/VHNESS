@@ -1,15 +1,23 @@
-# Arkhiv public SEO frontend deployment
+# Arkhiv product page deployment
 
 Verified main pushes and manual main dispatches build and deploy only the static
-`arkhiv-seo-web` frontend on Almaz. Its producer is `web/`: the locked workspace
-build, `seo:render public/site.json https://arkhiv.subcult.tv/`, then
-`web/Dockerfile.static`. The reference-image publisher and platform/core deployer
-retain their independent targets and release procedures.
+`arkhiv-seo-web` container on Almaz, which serves the root of
+`https://arkhiv.subcult.tv/`. Its producer is `site/`: plain HTML, CSS, fonts and
+icons copied into `site/Dockerfile`. There is no build step and the page loads no
+catalog API. It replaced the reference catalog that `web/` used to render here;
+`web/` remains the engine's reference interface for development and tests.
+`/api/*` on this domain is routed by Caddy to the platform and is not part of
+this image. The reference-image publisher and platform/core deployer retain their
+independent targets and release procedures.
 
-The SEO job waits for the existing application/database verification and checks
-the owned curation gate before activation. PRs build the actual prerendered image
-and check nginx, the catalog headline, canonical URL, large preview card, selected
-icons and preview image. The image also checks its own `/healthz` endpoint.
+The page follows the Diagram layout selected on 13 November 2026. Its reviewed
+mockup and website rules are in Studio, `studio/brands/arkhiv/WEBSITE.md`.
+
+The job waits for the existing application/database verification and checks the
+owned curation gate before activation. PRs build the actual image and run
+`scripts/check-seo-image.sh`: nginx, the headline, canonical URL, large preview
+card, all seven archive links, icons, fonts, preview image and a 404 for retired
+catalog paths. The image also checks its own `/healthz` endpoint.
 
 ## Almaz registration and first adoption
 
