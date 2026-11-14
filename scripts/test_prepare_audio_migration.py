@@ -46,6 +46,8 @@ class AudioMigrationTests(unittest.TestCase):
             review = json.loads((args[3] / 'review-recording.json').read_text())['review']
             self.assertEqual(plan['private_playback_recordings'], 1)
             self.assertTrue(review['playback'])
+            self.assertEqual(plan['donor']['kind'], 'private-backup')
+            self.assertIsNone(plan['legacy_schedule'])
             item = json.loads((args[3] / 'item-recording.json').read_text())
             audio = item['representations'][0]['extension']['audio']
             self.assertEqual(item['title'], 'Reviewed title')
