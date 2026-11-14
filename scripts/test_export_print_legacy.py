@@ -245,6 +245,15 @@ class ExportPrintLegacyTests(unittest.TestCase):
             self.export()
         self.assertFalse(self.output.exists())
 
+    @unittest.skipIf(os.geteuid() == 0, 'root reads any directory')
+    def test_unreadable_archive_directory_stops_before_output(self):
+        originals = self.root / 'archive' / 'originals'
+        originals.chmod(0)
+        self.addCleanup(originals.chmod, 0o755)
+        with self.assertRaisesRegex(ValueError, 'Archive directory cannot be read'):
+            self.export()
+        self.assertFalse(self.output.exists())
+
     def test_changed_table_export_is_rejected_by_prepare(self):
         self.export()
         path = self.output / 'restored-catalog.json'

@@ -73,7 +73,10 @@ def archive_files(archive):
     if not archive.is_dir():
         raise ValueError('Archive root is not a directory: ' + str(archive))
     files, total = {}, 0
-    for root, dirs, names in os.walk(archive):
+
+    def unreadable(error):  # os.walk would otherwise skip the directory silently
+        raise ValueError('Archive directory cannot be read: %s' % error)
+    for root, dirs, names in os.walk(archive, onerror=unreadable):
         dirs.sort()
         for name in sorted(dirs + names):
             path = Path(root) / name
