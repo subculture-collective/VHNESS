@@ -1,7 +1,7 @@
 name: viewer-release
-# Publishes the shared viewer package when its version changes on main and lands
-# the SDK receipt through an auto-merging pull request, which in turn triggers
-# consumer upgrade proposals. A version already in the registry is never republished.
+# Publishes the shared viewer package when its version changes on main. The GitHub
+# release-receipts workflow then lands its SDK receipt. A version already in the
+# registry is never republished.
 on:
   push:
     branches: [main]
@@ -92,13 +92,11 @@ jobs:
         if: steps.select.outputs.release == 'true'
         env:
           ARCHIVE_PACKAGE_TOKEN: ${{ secrets.ARCHIVE_PACKAGE_TOKEN }}
-          ARCHIVE_UPGRADE_TOKEN: ${{ secrets.ARCHIVE_UPGRADE_TOKEN }}
           VIEWER_VERSION: ${{ steps.select.outputs.version }}
           COMPATIBLE_CORE: ${{ inputs.compatible_core }}
         run: |
           set -euo pipefail
           test -n "$ARCHIVE_PACKAGE_TOKEN"
-          test -n "$ARCHIVE_UPGRADE_TOKEN"
           mkdir -p .artifacts
           pnpm --dir packages/viewer pack --pack-destination "$PWD/.artifacts" >/dev/null
           package=".artifacts/subcult-archive-viewer-$VIEWER_VERSION.tgz"
@@ -113,14 +111,9 @@ jobs:
           NPMRC
           chmod 600 "$NPM_CONFIG_USERCONFIG"
           npm publish "$package" --registry https://git.subcult.tv/api/packages/subculture-collective/npm/
+          # Check the receipt can be written; the GitHub release-receipts workflow commits it.
           if [ -n "$COMPATIBLE_CORE" ]; then
             python3 scripts/viewer_receipt.py --package "$package" --compatible-core "$COMPATIBLE_CORE"
           else
             python3 scripts/viewer_receipt.py --package "$package"
           fi
-          branch="release/viewer-$VIEWER_VERSION"
-          git switch -c "$branch"
-          git add "docs/releases/viewer-release-$VIEWER_VERSION.json"
-          git -c user.name='SUBCULT Agent' -c user.email='info@subcult.tv' -c commit.gpgsign=false commit -m "release(viewer): record published $VIEWER_VERSION SDK artifact"
-          git -c credential.helper= -c 'credential.helper=!f() { echo username=subcult-agent; echo "password=$ARCHIVE_UPGRADE_TOKEN"; }; f' push origin "$branch"
-          python3 scripts/receipt_pull_request.py --branch "$branch" --title "Record viewer $VIEWER_VERSION SDK receipt" --body "Automated receipt for the published \`@subcult/archive-viewer@$VIEWER_VERSION\` artifact. Merging it starts the consumer upgrade proposals."
