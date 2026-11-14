@@ -70,6 +70,15 @@ open for review. The job never deploys a consumer; a merged upgrade deploys
 through that consumer's own pipeline. The design and rollout order
 are in [plan 0006](../plans/0006-automated-update-and-deploy.md).
 
+Every live site is registered in both lanes: a `viewer` entry for the shared
+viewer package and an `api` entry for the core pin (`deploy/core-release.json`
+and `deploy/archive-core.env`). Registry tests fail if a viewer consumer lacks
+its core entry. Consumers are registered under their GitHub names; Lineage is
+`subculture-collective/lineage`, with its former Gitea path kept in
+`previous_repository`. The job reads each repository's metadata before cloning
+it and skips an archived repository with no clone, checks or PR. The archived
+`video-archive-template` was removed from the registry on 2026-11-14.
+
 Committed receipts under `docs/releases/` bind published registry bytes to their
 qualified source and engine digest. The proposal job runs on default-branch
 receipt/registry changes or explicit dispatch. It downloads the actual registry

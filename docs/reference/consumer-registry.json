@@ -2,39 +2,6 @@
   "registry_version": 1,
   "consumers": [
     {
-      "repository": "subculture-collective/video-archive-template",
-      "media": [
-        "video"
-      ],
-      "adoption": "package",
-      "rollout": "reviewed-pr",
-      "package_file": "web/package.json",
-      "lock_file": "web/pnpm-lock.yaml",
-      "release_file": "deploy/viewer-release.json",
-      "checks": [
-        [
-          "make",
-          "verify"
-        ]
-      ],
-      "adoption_status": "merged",
-      "adoption_ref": "main",
-      "adoption_pull_request": "https://git.subcult.tv/subculture-collective/video-archive-template/pulls/2",
-      "adoption_revision": "77c17ebd7c1da55443936541ef2363092d9f9f07",
-      "merge_revision": "62c5f6794096f7ee29e3bf18bb810ebb4c317b1b",
-      "previous_registration": {
-        "release_file": "deploy/platform-release.json",
-        "engine_file": "deploy/archive-engine.env"
-      },
-      "mode": "viewer",
-      "core_file": "deploy/core-release.json",
-      "core_engine_file": "deploy/archive-core.env",
-      "modules": {
-        "catalog": "1",
-        "video": "1"
-      }
-    },
-    {
       "repository": "subculture-collective/democracy-now-tv",
       "media": [
         "video"
@@ -358,32 +325,8 @@
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/dedhed/pulls/32"
     },
     {
-      "repository": "subculture-collective/video-archive-template",
-      "media": [
-        "video"
-      ],
-      "adoption": "core",
-      "mode": "api",
-      "rollout": "reviewed-pr",
-      "release_file": "deploy/core-release.json",
-      "engine_file": "deploy/archive-core.env",
-      "modules": {
-        "catalog": "1",
-        "video": "1"
-      },
-      "checks": [
-        [
-          "make",
-          "verify"
-        ]
-      ],
-      "adoption_status": "merged",
-      "adoption_ref": "main",
-      "adoption_revision": "ea480f4fde4ff903ab9575cc8a4a50e229365bd6",
-      "adoption_pull_request": "https://git.subcult.tv/subculture-collective/video-archive-template/pulls/5"
-    },
-    {
-      "repository": "PatrickFanella/arkhiv-live-music",
+      "repository": "subculture-collective/lineage",
+      "previous_repository": "PatrickFanella/arkhiv-live-music",
       "media": [
         "audio"
       ],
@@ -410,11 +353,11 @@
         "audio": "1",
         "source_catalog": "1"
       },
-      "merge_revision": "c8355b3cb72f0ccd6d88b70fb5fbf60331cfef25",
-      "github_repository": "subculture-collective/lineage"
+      "merge_revision": "c8355b3cb72f0ccd6d88b70fb5fbf60331cfef25"
     },
     {
-      "repository": "PatrickFanella/arkhiv-live-music",
+      "repository": "subculture-collective/lineage",
+      "previous_repository": "PatrickFanella/arkhiv-live-music",
       "media": [
         "audio"
       ],
@@ -441,8 +384,7 @@
         "source_artist_photos": "1",
         "source_artist_media": "1"
       },
-      "merge_revision": "a9ee2892f2a52c0ffa15f0681d1d73ef6a1f2891",
-      "github_repository": "subculture-collective/lineage"
+      "merge_revision": "a9ee2892f2a52c0ffa15f0681d1d73ef6a1f2891"
     },
     {
       "repository": "subculture-collective/chicago-labor-archive",
@@ -471,6 +413,31 @@
         "catalog": "1",
         "print": "1"
       }
+    },
+    {
+      "repository": "subculture-collective/chicago-labor-archive",
+      "media": [
+        "print"
+      ],
+      "adoption": "core",
+      "mode": "api",
+      "rollout": "reviewed-pr",
+      "release_file": "deploy/core-release.json",
+      "engine_file": "deploy/archive-core.env",
+      "modules": {
+        "catalog": "1",
+        "print": "1"
+      },
+      "checks": [
+        [
+          "python3",
+          "scripts/check_core_pin.py"
+        ]
+      ],
+      "adoption_status": "merged",
+      "adoption_ref": "main",
+      "adoption_revision": "f76b291021ef8c80552cf88c056564a91698fe21",
+      "merge_revision": "f76b291021ef8c80552cf88c056564a91698fe21"
     }
   ]
 }

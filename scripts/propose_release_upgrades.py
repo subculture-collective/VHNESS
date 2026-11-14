@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from download_release_package import download
-from propose_consumer_upgrade import github_repository, proposal
+from propose_consumer_upgrade import api, github_repository, proposal
 
 
 
@@ -29,6 +29,51 @@ def consumer_test_database(inspected, run, repository, resolve=socket.gethostbyn
     if not re.fullmatch(r'[a-z][a-z0-9_]{0,62}', database):
         raise ValueError('Invalid consumer test database name')
     return database, 'postgres://dev:disposable-dev-only@db:5432/' + database + '?sslmode=disable'
+
+
+def propose_all(registry, release, kind, artifact, work, adoption_refs=False, auto_merge=False, request=api):
+    """Propose the release to every consumer registered in its lane; return the repositories that failed."""
+    failed = []
+    for consumer in registry['consumers']:
+        lane = 'core' if consumer.get('mode') == 'api' else 'viewer' if consumer.get('mode') == 'viewer' else 'platform'
+        if lane != kind:
+            continue
+        if consumer['adoption'] != ('core' if kind == 'core' else 'package'):
+            print(consumer['repository'], 'package adoption pending', flush=True)
+            continue
+        base_ref = None
+        if consumer.get('adoption_status') == 'pull-request':
+            if not adoption_refs:
+                print(consumer['repository'], 'adoption remains in review; select --adoption-refs for a stacked proposal', flush=True)
+                continue
+            base_ref = consumer['adoption_ref']
+        try:
+            # An archived repository accepts no branch or PR; skip it before cloning or running its checks.
+            if request('/repos/' + github_repository(consumer)).get('archived'):
+                print(consumer['repository'], 'is archived; no proposal', flush=True)
+                continue
+            clone = work / consumer['repository'].replace('/', '__')
+            subprocess.run(['git', 'clone', '--quiet', 'https://github.com/' + github_repository(consumer) + '.git', str(clone)], check=True)
+            if base_ref:
+                subprocess.run(['git', 'switch', '--detach', 'origin/' + base_ref], cwd=clone, check=True)
+                revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=clone, text=True).strip()
+                if revision != consumer['adoption_revision']:
+                    raise ValueError('Reviewed adoption branch moved; refresh its qualification before proposing')
+            database_container = os.environ.get('ARCHIVE_UPGRADE_DATABASE_CONTAINER')
+            if database_container:
+                if not re.fullmatch(r'[0-9a-f]{64}', database_container):
+                    raise ValueError('Expected one full job-owned database container identity')
+                inspected = json.loads(subprocess.check_output(['docker', 'inspect', database_container]))[0]
+                database, test_url = consumer_test_database(inspected, os.environ['ARCHIVE_UPGRADE_DATABASE_RUN'], consumer['repository'])
+                subprocess.run(['docker', 'exec', database_container, 'createdb', '-U', 'dev', database], check=True)
+                os.environ['TEST_DATABASE_URL'] = test_url
+            result = proposal(release, consumer, clone, artifact, request=request, base_ref=base_ref, auto_merge=auto_merge)
+        except Exception as error:  # One consumer's failure must not block the others.
+            print(consumer['repository'], 'proposal failed:', error, flush=True)
+            failed.append(consumer['repository'])
+            continue
+        print(consumer['repository'], result or 'Release already applied; no PR', flush=True)
+    return failed
 
 
 def main():
@@ -56,45 +101,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix='archive-proposals-') as temporary:
         work = Path(temporary)
         artifact = None if args.kind == 'core' else download(release, work / release['package_file'])
-        failed = []
-        for consumer in registry['consumers']:
-            lane = 'core' if consumer.get('mode') == 'api' else 'viewer' if consumer.get('mode') == 'viewer' else 'platform'
-            if lane != args.kind:
-                continue
-            if consumer['adoption'] != ('core' if args.kind == 'core' else 'package'):
-                print(consumer['repository'], 'package adoption pending', flush=True)
-                continue
-            base_ref = None
-            if consumer.get('adoption_status') == 'pull-request':
-                if not args.adoption_refs:
-                    print(consumer['repository'], 'adoption remains in review; select --adoption-refs for a stacked proposal', flush=True)
-                    continue
-                base_ref = consumer['adoption_ref']
-            try:
-                clone = work / consumer['repository'].replace('/', '__')
-                subprocess.run(['git', 'clone', '--quiet', 'https://github.com/' + github_repository(consumer) + '.git', str(clone)], check=True)
-                if base_ref:
-                    subprocess.run(['git', 'switch', '--detach', 'origin/' + base_ref], cwd=clone, check=True)
-                    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=clone, text=True).strip()
-                    if revision != consumer['adoption_revision']:
-                        raise ValueError('Reviewed adoption branch moved; refresh its qualification before proposing')
-                database_container = os.environ.get('ARCHIVE_UPGRADE_DATABASE_CONTAINER')
-                if database_container:
-                    if not re.fullmatch(r'[0-9a-f]{64}', database_container):
-                        raise ValueError('Expected one full job-owned database container identity')
-                    inspected = json.loads(subprocess.check_output(['docker', 'inspect', database_container]))[0]
-                    database, test_url = consumer_test_database(inspected, os.environ['ARCHIVE_UPGRADE_DATABASE_RUN'], consumer['repository'])
-                    subprocess.run(['docker', 'exec', database_container, 'createdb', '-U', 'dev', database], check=True)
-                    os.environ['TEST_DATABASE_URL'] = test_url
-                result = proposal(release, consumer, clone, artifact, base_ref=base_ref, auto_merge=args.auto_merge)
-            except Exception as error:  # One consumer's failure must not block the others.
-                print(consumer['repository'], 'proposal failed:', error, flush=True)
-                failed.append(consumer['repository'])
-                continue
-            print(consumer['repository'], result or 'Release already applied; no PR', flush=True)
+        failed = propose_all(registry, release, args.kind, artifact, work, args.adoption_refs, args.auto_merge)
         if failed:
             raise SystemExit('Proposals failed for: ' + ', '.join(failed))
-
 
 if __name__ == '__main__':
     main()
