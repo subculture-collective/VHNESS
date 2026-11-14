@@ -43,6 +43,12 @@ selected collection; typed print/audio entries have their own contracts. Consume
 own mixed media page composition. Acquisition/publication policies stay on the
 server.
 
+The root entry also exports the video sites' viewer tools: `VideoTools`,
+`useTheater`, `episodeLink`, `useViewerLinks`, `AccountPanel`, `FavoriteAction`,
+`FavoriteShelf`, `ChatPanel` and `useLibraryLayout`. They use the same class
+names as the video apps (`viewer-tools`, `account-panel`, `favorite-shelf`,
+`chat-panel` and others); pass the product name to `AccountPanel`.
+
 Build with the pinned root pnpm version using `pnpm build:packages`. Packages
 ship compiled ESM and declarations; consumers need no sibling source checkout.
 The legacy `scripts/export_viewer.py` remains a compatibility path until every

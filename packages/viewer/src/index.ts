@@ -9,3 +9,4 @@ export * from './videoState.js';
 export * from './videoCatalog.js';
 export { usePersonal, personalRequest, PersonalError, readLocalFavorites, type Personal, type PersonalUser, type Favorite, type PendingFavorite } from './personal.js';
 export { useChannelChat, useAudioChannelChat, type ChatRoom, type ChatMedia, type ChatCursor, type ChannelChat, type ChatMessage, type ChatProgram, type ChatReport } from './chat.js';
+export * from './ViewerTools.js';
