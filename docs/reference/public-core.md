@@ -53,3 +53,42 @@ revision before declaring rollout complete. The integration checks cover
 private-content denial, explicit print/video approval, exact original bytes,
 withdrawal, changed-source invalidation, private future schedules and unchanged
 private catalog visibility; they do not establish real media fidelity.
+
+## Automatic collection access
+
+A collection can also carry one recorded automatic access decision, as the
+retained Anarchist collection did with its `approve-automatic` policy. Migration
+0024 adds the decision tables and records no decision. Record or repeat one with:
+
+```sh
+vhness review-public-collection --collection COLLECTION --approve-public \
+  --notes 'Exact owner decision and scope'
+```
+
+The command records the decision and applies it in one transaction. It publishes
+listed print representations whose current private review grants reading of the
+current source snapshot, including the primary file, and whose primary file has
+a reader index with at least one page. Each grant keeps the review's files,
+actions and preservation record, passes the same checks as `review-transport
+--approve-public`, and is linked to the decision. The command prints the decision
+ID, the number approved and each skipped representation with its reason. Apply it
+after importing, reviewing and indexing; run it again to cover representations
+reviewed later. Each run is a new recorded decision.
+
+To withdraw one item, record its normal private review with `review-transport`.
+Any private review recorded after a public grant counts as a withdrawal, and
+later automatic decisions skip that representation. Only a manual
+`review-transport --approve-public` makes it public again.
+
+Run the command without `--approve-public`, with withdrawal notes, to withdraw
+the decision. It revokes only the grants that automatic decisions made; manual
+approvals stay public. Withdrawing the decision does not count as withdrawing
+the items, so a later automatic decision can publish them again.
+
+Transport history marks each row as `operator` or `automatic` and links automatic
+rows to their decision:
+
+```sh
+vhness transport-history --id ITEM --representation REPRESENTATION \
+  --collection COLLECTION
+```

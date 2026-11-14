@@ -73,6 +73,12 @@ func (d *DB) reviewTransport(ctx context.Context, item, representation, collecti
 }
 
 func reviewTransportTx(ctx context.Context, tx pgx.Tx, item, representation, collection string, review domain.TransportReview, approval domain.PreservationApproval, public bool) error {
+	return checkTransportTx(ctx, tx, item, representation, collection, review, approval, public, nil)
+}
+
+// checkTransportTx authorizes and records a review. A non-nil automatic links
+// the review and its history row to a collection automatic access decision.
+func checkTransportTx(ctx context.Context, tx pgx.Tx, item, representation, collection string, review domain.TransportReview, approval domain.PreservationApproval, public bool, automatic *int64) error {
 	if strings.TrimSpace(review.Notes) == "" || (review.Public && !public) || len(review.Files) > 1000 {
 		return fmt.Errorf("invalid transport review")
 	}
@@ -107,6 +113,10 @@ func reviewTransportTx(ctx context.Context, tx pgx.Tx, item, representation, col
 			}
 		}
 	}
+	return writeTransportTx(ctx, tx, item, representation, collection, review, approval, automatic)
+}
+
+func writeTransportTx(ctx context.Context, tx pgx.Tx, item, representation, collection string, review domain.TransportReview, approval domain.PreservationApproval, automatic *int64) error {
 	reviewJSON, err := json.Marshal(review)
 	if err != nil {
 		return err
@@ -115,9 +125,9 @@ func reviewTransportTx(ctx context.Context, tx pgx.Tx, item, representation, col
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO representation_transport_reviews(item_id,representation_id,collection_id,review,preservation) VALUES($1,$2,$3,$4,$5) ON CONFLICT(item_id,representation_id,collection_id) DO UPDATE SET review=excluded.review,preservation=excluded.preservation,updated_at=now()`, item, representation, collection, reviewJSON, approvalJSON); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO representation_transport_reviews(item_id,representation_id,collection_id,review,preservation,automatic_access) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(item_id,representation_id,collection_id) DO UPDATE SET review=excluded.review,preservation=excluded.preservation,automatic_access=excluded.automatic_access,updated_at=now()`, item, representation, collection, reviewJSON, approvalJSON, automatic); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO representation_transport_history(item_id,representation_id,collection_id,review,preservation) VALUES($1,$2,$3,$4,$5)`, item, representation, collection, reviewJSON, approvalJSON)
+	_, err = tx.Exec(ctx, `INSERT INTO representation_transport_history(item_id,representation_id,collection_id,review,preservation,automatic_access) VALUES($1,$2,$3,$4,$5,$6)`, item, representation, collection, reviewJSON, approvalJSON, automatic)
 	return err
 }
