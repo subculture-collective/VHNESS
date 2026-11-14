@@ -57,9 +57,15 @@ jobs:
             --body "Receipts written by the Release receipts workflow from the artifacts Gitea Actions published for \`$GITHUB_SHA\`.")
           # Pushes and pull requests made with this token start no workflows, so
           # run Mirror CI explicitly. GitHub does not link a dispatched run to the
-          # pull request, so once it passes, record its result as the required
-          # "Mirror CI gate" check on the branch head, then let the PR merge.
+          # pull request, so record its result as the required "Mirror CI gate"
+          # check on the branch head, then let the PR merge. Create the check
+          # before dispatching: an API-created check joins the commit's first
+          # Actions check suite, and once the dispatched run exists that can be
+          # the run's own suite, which the pull request does not count.
           head=$(git rev-parse HEAD)
+          check_id=$(gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name='Mirror CI gate' -f head_sha="$head" \
+            -f status=in_progress -f 'output[title]=Waiting for Mirror CI' \
+            -f "output[summary]=Mirror CI is being dispatched for $head." --jq .id)
           gh workflow run mirror-ci.yml --ref "$branch"
           run_id=""
           for _ in $(seq 1 30); do
@@ -68,11 +74,13 @@ jobs:
             sleep 10
           done
           test -n "$run_id"
-          gh run watch "$run_id" --exit-status --interval 30 > /dev/null
-          gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name='Mirror CI gate' -f head_sha="$head" \
-            -f status=completed -f conclusion=success \
+          conclusion=success
+          gh run watch "$run_id" --exit-status --interval 30 > /dev/null || conclusion=failure
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$check_id" \
+            -f status=completed -f conclusion="$conclusion" \
             -f details_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id" \
-            -f 'output[title]=Mirror CI passed' -f "output[summary]=Dispatched Mirror CI run $run_id passed on $head." > /dev/null
+            -f "output[title]=Mirror CI $conclusion" -f "output[summary]=Dispatched Mirror CI run $run_id: $conclusion on $head." > /dev/null
+          test "$conclusion" = success
           gh pr merge --auto --squash "$url"
           echo "$url"
           # Propose the new releases to the consumers once the receipt merges. A
