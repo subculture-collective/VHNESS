@@ -6,18 +6,75 @@ file manifest and database dump, the restore receipt, exported table counts,
 original asset sizes/hashes and the complete source metadata. It writes a new
 output directory and refuses to overwrite one. It changes no database or archive.
 
-Supply the backup directory containing `complete.json`, `catalog.dump` and
-`archive/`, a JSON export of the restored `documents`, `variants`, `assets`,
-`collections`, `source_snapshots` and `asset_companions` tables, and a restore
-receipt with `restore_exit_code`, `dump_sha256` and `table_counts`.
+Supply the backup directory containing `catalog.dump` and `archive/`, its
+manifest `complete.json`, a JSON export of the restored legacy tables, and a
+restore receipt with `restore_exit_code`, `dump_sha256` and `table_counts`.
+`scripts/export_print_legacy.py` writes the last three.
+
+## Exporting the legacy inputs
+
+Restore `catalog.dump` into an empty, isolated database, then run the export
+against it. `--backup` is the same directory prepare reads: `catalog.dump` must be
+the dump you restored, and `archive/` the archive root (it may be a link to it).
+
+```sh
+DATABASE_URL_FILE=/private/restored-legacy.url \
+python3 scripts/export_print_legacy.py \
+  --backup /private/independent-backup --source backup \
+  --restore-exit-code 0 --output /private/legacy-export
+```
+
+The export reads all seventeen legacy tables in one read-only statement and stops
+if the database has a table it does not know, so nothing is left out. It hashes
+the dump and every file under `archive/`, and stops at a link or special file.
+It writes a new directory (mode 0700) with three files, each mode 0600:
+
+- `complete.json`: the backup manifest, with the dump hash and size, every
+  archive file's SHA-256, and `source`.
+- `restored-catalog.json`: every row of every table. `page_text` omits its
+  generated `search` column.
+- `restore-receipt.json`: the restore exit code, dump hash, row count per table,
+  `source` and the hash of `restored-catalog.json`.
+
+It changes no database, dump or archive. Exporting the same restored database
+twice writes the same table export and receipt. As in apply, `DATABASE_URL` or
+`DATABASE_URL_FILE` becomes libpq variables, so the connection string never
+appears on a command line; `--psql` takes a prefix such as `docker exec -i db
+psql -U arkhiv -d restored`.
+
+`--source` is required and is recorded in the manifest and receipt:
+
+- `backup`: the archive and dump are an independent off-host backup copy. Only
+  this is evidence for a cutover.
+- `live`: the live archive and a fresh dump of the live database. Use it only
+  for rehearsals.
+
+The export cannot check that the restored database came from `catalog.dump`, or
+that a `backup` source really is off-host; the operator states both.
+
+`scripts/test_export_print_legacy.py` exports a synthetic fixture through a fake
+database, then prepares and applies it. With `ARKHIV_TEST_LEGACY_DATABASE_URL`
+and `ARKHIV_TEST_DATABASE_URL` (two disposable databases) and `VHNESS_BIN` set,
+it builds the legacy schema in the first, exports it with `psql`, and applies the
+plan twice to the second through the real commands.
+
+## Preparing the plan
 
 ```sh
 python3 scripts/prepare_print_migration.py \
   --backup /private/independent-backup \
-  --restored-catalog /private/restored-catalog.json \
-  --restore-receipt /private/restore-receipt.json \
+  --manifest /private/legacy-export/complete.json \
+  --restored-catalog /private/legacy-export/restored-catalog.json \
+  --restore-receipt /private/legacy-export/restore-receipt.json \
   --output /private/new-platform-inputs
 ```
+
+`--manifest` defaults to `BACKUP/complete.json`. Prepare refuses a manifest whose
+`source` is `live`, or that records no source, unless you pass
+`--allow-live-source`; then it warns, and the plan records `evidence_source` and
+`cutover_evidence: false`. A plan from a `backup` source records
+`cutover_evidence: true`. Prepare also refuses a restore receipt whose source or
+table export hash differs from the files it is given.
 
 Documents and variants retain their IDs and grouping. Complete document and
 variant rows remain in editorial provenance; original metadata and reviewed

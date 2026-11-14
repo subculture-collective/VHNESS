@@ -43,10 +43,20 @@ def filename(value):
     return value
 
 
-def prepare(backup, catalog_file, restore_file, output, retain_public=False):
-    receipt = json.loads((backup / 'complete.json').read_text())
+def prepare(backup, catalog_file, restore_file, output, retain_public=False, manifest=None, allow_live=False):
+    receipt = json.loads((manifest or backup / 'complete.json').read_text())
     restore = json.loads(restore_file.read_text())
+    # Cutover needs an independent off-host backup. A manifest of the live archive,
+    # or one that does not say what it describes, is accepted only for a rehearsal.
+    evidence = receipt.get('source') if receipt.get('source') in ('backup', 'live') else 'unrecorded'
+    if restore.get('source', evidence) != evidence:
+        raise ValueError('Restore receipt and backup manifest describe different sources')
+    if evidence != 'backup' and not allow_live:
+        raise ValueError('Backup manifest source is %s, not an independent off-host backup; '
+                         'pass --allow-live-source only for a rehearsal' % evidence)
     catalog = json.loads(catalog_file.read_text())
+    if restore.get('restored_catalog_sha256', digest(catalog_file.read_bytes())) != digest(catalog_file.read_bytes()):
+        raise ValueError('Restored table export differs from the one its restore receipt records')
     archive = backup / 'archive'
     dump = (backup / 'catalog.dump').read_bytes()
     if (receipt.get('complete') is not True or restore.get('restore_exit_code') != 0
@@ -213,6 +223,7 @@ def prepare(backup, catalog_file, restore_file, output, retain_public=False):
             'reviews': [{k: v for k, v in review.items() if k != 'input'} for review in reviewed],
             'indexes': [{k: v for k, v in index.items() if k != 'input'} for index in indexes],
             'database_only_historical_snapshots': historical_snapshots,
+            'evidence_source': evidence, 'cutover_evidence': evidence == 'backup',
             'history_owner': 'Retained original dump and independently restored legacy database',
             'scope': ('Retained current published variant approvals only; no new public scope' if retain_public else 'Private existing pilot only; no acquisition, relay or public approval')}
     for collection in collections:
@@ -232,7 +243,13 @@ if __name__ == '__main__':
     parser.add_argument('--restored-catalog', required=True, type=Path)
     parser.add_argument('--restore-receipt', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--manifest', type=Path, help='Backup manifest (default: BACKUP/complete.json)')
+    parser.add_argument('--allow-live-source', action='store_true',
+                        help='Accept a manifest of the live archive, or one without a source, for a rehearsal; never for cutover')
     parser.add_argument('--retain-public-approvals', action='store_true', help='Preserve only current published/approved variants in the independently restored donor; never approve additional variants')
     args = parser.parse_args()
-    plan = prepare(args.backup, args.restored_catalog, args.restore_receipt, args.output, args.retain_public_approvals)
+    plan = prepare(args.backup, args.restored_catalog, args.restore_receipt, args.output, args.retain_public_approvals,
+                   args.manifest, args.allow_live_source)
     print('Private migration inputs:', plan['documents'], 'documents,', plan['variants'], 'variants')
+    if not plan['cutover_evidence']:
+        print('Warning: prepared from a %s source, not an independent off-host backup; rehearsal only.' % plan['evidence_source'])
