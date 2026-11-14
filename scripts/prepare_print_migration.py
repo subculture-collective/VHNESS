@@ -21,6 +21,22 @@ def sha(value):
     return value
 
 
+# The legacy app kept 2 GiB free when acquiring a collection, and used the same
+# floor for updates unless updates.minimum_free_bytes set another.
+LEGACY_RESERVE = 2 << 30
+
+
+def legacy_limits(config):
+    """The core byte budget and free-space reserve that carry a legacy collection's limits."""
+    budget = (config.get('limits') or {}).get('total_bytes')
+    reserve = (config.get('updates') or {}).get('minimum_free_bytes') or LEGACY_RESERVE
+    for value in (budget, reserve):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError('Retained collection configuration has no positive limits.total_bytes or minimum_free_bytes')
+    return {'budget': budget, 'reserve': reserve,
+            'basis': 'legacy limits.total_bytes; updates.minimum_free_bytes, or the legacy 2 GiB free-space floor'}
+
+
 def filename(value):
     if not value or Path(value).name != value or '\\' in value or '\x00' in value:
         raise ValueError('Invalid source filename')
@@ -68,6 +84,7 @@ def prepare(backup, catalog_file, restore_file, output, retain_public=False):
             raise ValueError('Original source response differs from restored metadata')
         snapshots[key] = (row['item_id'], raw, digest(raw))
     collections = {row['id']: row['config'] for row in catalog['collections']}
+    limits = {collection: legacy_limits(config) for collection, config in collections.items()}
     planned = []
     reviewed = []
     indexes = []
@@ -204,6 +221,7 @@ def prepare(backup, catalog_file, restore_file, output, retain_public=False):
         save('retained-export-' + collection + '.json', {'collection': collection, 'module': 'print',
              'independent_recovery_sha256': recovery, 'tables': catalog,
              'counts': {table: len(rows) for table, rows in catalog.items()}})
+    plan['collection_limits'] = limits
     save('migration-plan.json', plan)
     return plan
 

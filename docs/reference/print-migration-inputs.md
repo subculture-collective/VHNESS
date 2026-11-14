@@ -36,8 +36,11 @@ Keep the original database dump and fresh legacy restore as the authority for
 all prior decisions, acquisition events, text indexes and schema history. Common
 catalog import adds its own migration/transport history; it does not reinterpret
 legacy events as newly granted rights. Rebuild common derivatives separately and
-retain original derivatives. Collection limits and deployment scope still
-require their retained configuration.
+retain original derivatives. `migration-plan.json` records each collection's
+legacy limits in `collection_limits`: `budget` from `limits.total_bytes`, and
+`reserve` from `updates.minimum_free_bytes`, or the legacy app's 2 GiB free-space
+floor when that is unset. Prepare refuses a collection without a positive
+`limits.total_bytes`. Deployment scope still requires its retained configuration.
 
 ## Applying the plan
 
@@ -45,8 +48,12 @@ require their retained configuration.
 `vhness` operator commands, in this order:
 
 1. `migrate`.
-2. `collection`, with `local_preserve` policy and the `--budget` and
-   `--reserve` you pass. Without them, the collection must already exist.
+2. `collection`, with `local_preserve` policy. Each collection gets the
+   budget and reserve the plan records for it in `collection_limits`. Passing
+   `--budget` and `--reserve` overrides them, with the same values for every
+   collection in the plan. A plan prepared before `collection_limits` existed
+   needs them, or the collection must already exist. The receipt records each
+   collection's values and whether they came from the plan or the override.
 3. `retain-legacy` for each `retained-export-*.json`. This stores the donor's
    collection configuration, so the compatibility `/api/collections` returns
    the collection name, introduction and accent.
@@ -62,8 +69,7 @@ require their retained configuration.
 DATABASE_URL=... VHNESS_COLLECTION=zines \
 VHNESS_MEDIA=/private/independent-backup/archive \
 VHNESS_DERIVATIVES=/private/independent-backup/archive \
-python3 scripts/apply_print_migration.py \
-  --plan /private/new-platform-inputs --budget 1073741824 --reserve 1073741824
+python3 scripts/apply_print_migration.py --plan /private/new-platform-inputs
 ```
 
 Before each step, the script reads the database with `psql` and skips the step
@@ -71,7 +77,9 @@ when the database already holds that exact input. Rerunning a completed plan
 therefore changes nothing, and rerunning after a failure resumes at the failed
 step. A step whose current state differs from the input stops the run instead of
 overwriting it, for example a catalog item or transport review changed after
-migration, or a collection with other limits. Catalog items compare their
+migration, or a collection with other limits. `review-budget` can only raise a
+collection's limits, so a collection created with a larger budget than the plan's
+keeps it; pass the same override again to rerun. Catalog items compare their
 fields, editorial record, listed memberships and representations, not only
 their IDs. After each command, the script checks that the
 database now holds the input.
