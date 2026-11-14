@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { catalogCreatorsURL, catalogFavoriteID, catalogLabelsURL, catalogSelectionURL, catalogRequest, catalogURL, representationURL, sourceProvider, type RepresentationTransport } from './catalog.js';
+import { catalogCreatorsURL, catalogFavoriteID, catalogLabelsURL, catalogSeriesIssue, catalogSelectionURL, catalogRequest, catalogURL, representationURL, sourceProvider, type RepresentationTransport } from './catalog.js';
 
 test('metadata queries preserve collection scope and escape user text',()=> {
   const url = new URL(catalogURL({collection:'mixed',media:'print',query:'&collection=other',page:2}),'https://test.invalid');
@@ -16,6 +16,25 @@ test('label and text filters are sent only when set',()=> {
   expect(plain.searchParams.has('label')).toBe(false);
   expect(catalogLabelsURL('regional','topic')).toBe('/api/catalog/v1/labels?collection=regional&kind=topic');
   expect(catalogLabelsURL('')).toBe('/api/catalog/v1/labels');
+});
+test('a series filter asks for the series label, which the engine returns in issue order',()=> {
+  const url = new URL(catalogURL({collection:'zines',media:'',query:'',page:1,series:'riot-grrrl'}),'https://test.invalid');
+  expect(url.searchParams.getAll('label')).toEqual(['riot-grrrl']);
+  expect(new URL(catalogURL({collection:'zines',media:'',query:'',page:1,series:'riot-grrrl',label:'riot-grrrl'}),'https://test.invalid').searchParams.getAll('label')).toEqual(['riot-grrrl']);
+  expect(()=>catalogURL({collection:'zines',media:'',query:'',page:1,series:'riot-grrrl',label:'strikes'})).toThrow('not both');
+  expect(catalogLabelsURL('zines','series')).toBe('/api/catalog/v1/labels?collection=zines&kind=series');
+});
+test('an item names its issue of a series',()=> {
+  const item = {labels:[
+    {id:'feminism',kind:'topic' as const,label:'Feminism'},
+    {id:'riot-grrrl',kind:'series' as const,label:'Riot Grrrl',issue_position:3,issue_label:'Volume 3'},
+    {id:'bikini-kill',kind:'series' as const,label:'Bikini Kill',issue_position:0,issue_label:'1'},
+  ]};
+  expect(catalogSeriesIssue(item,'riot-grrrl')).toEqual({id:'riot-grrrl',kind:'series',label:'Riot Grrrl',issue_position:3,issue_label:'Volume 3'});
+  expect(catalogSeriesIssue(item,'bikini-kill')?.issue_position).toBe(0);
+  expect(catalogSeriesIssue(item,'feminism')).toBeUndefined();
+  expect(catalogSeriesIssue(item,'missing')).toBeUndefined();
+  expect(catalogSeriesIssue({},'riot-grrrl')).toBeUndefined();
 });
 test('creator suggestions keep the collection scope and escape it',()=> {
   expect(catalogCreatorsURL('riot-grrrl')).toBe('/api/catalog/v1/creators?collection=riot-grrrl');

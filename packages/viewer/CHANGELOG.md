@@ -1,3 +1,12 @@
+## 0.4.12
+
+The catalog entry covers series. `CatalogLabelKind` includes `series`, and item
+labels carry `issue_position` and `issue_label` on a series label.
+`useCatalog({series})` lists a series' items in issue order; it sends the
+series as the `label` filter, so setting a different `label` with it throws.
+`catalogSeriesIssue(item, series)` returns the item's issue of a series.
+Needs core 0.4.11.
+
 ## 0.4.11
 
 Creator suggestions come from the core instead of a whole-catalog fetch in the
