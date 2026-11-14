@@ -47,8 +47,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      # Reads this workflow's earlier runs and their core job results.
-      actions: read
+      # Reads the deploy:core record of the last successful core deploy.
+      deployments: read
     outputs:
       core: ${{ steps.core.outputs.core }}
     steps:
@@ -89,28 +89,24 @@ jobs:
           fi
           if [ "$EVENT" = workflow_dispatch ] && [ "$DISPATCH_CORE" = true ]; then core=true; fi
           # A wrapper change needs a new core image even when the version
-          # matches. Compare with the head of the last run whose core job
-          # succeeded: a core run that was refused, cancelled, skipped because
-          # CORE_DEPLOY_ENABLED was off, or never started does not count, so
-          # its wrapper change carries forward. Without such a run among the
-          # last 50, compare the pushed range, or the parent when that is unknown.
+          # matches. Compare with the commit of the last successful core
+          # deploy, which the core job records as a deploy:core deployment. A
+          # core run that was refused, cancelled or skipped records nothing, so
+          # its wrapper change carries forward. With no record yet, deploy the
+          # core once to create one. If the record cannot be read, or is not an
+          # ancestor, compare the pushed range, or the parent when that is unknown.
           base=$(git rev-parse "$DEPLOY_REVISION^")
           if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
             && git merge-base --is-ancestor "$BEFORE" "$DEPLOY_REVISION"; then base=$BEFORE; fi
-          last=""
-          if runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs?branch=main&status=completed&per_page=50" \
-            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'); then
-            while read -r run sha; do
-              [ -n "$run" ] || continue
-              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest" \
-                --jq '.jobs[] | select(.name == "Deploy the pinned core image" and .conclusion == "success") | .id' | grep -q .; then
-                last=$sha; break
-              fi
-            done <<< "$runs"
-          fi
-          if [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null \
-            && git merge-base --is-ancestor "$last" "$DEPLOY_REVISION"; then
-            base=$last
+          if last=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=production&task=deploy:core&per_page=1" \
+            --jq '.[0].sha // ""'); then
+            if [ -z "$last" ]; then
+              echo "No recorded core deploy yet; deploying the core to record one"; core=true
+            elif git cat-file -e "$last^{commit}" 2>/dev/null && git merge-base --is-ancestor "$last" "$DEPLOY_REVISION"; then
+              base=$last
+            else
+              echo "::warning title=Last core deploy not an ancestor::Comparing deploy/core.Dockerfile with $base only."
+            fi
           else
             echo "::warning title=Last core deploy unknown::Comparing deploy/core.Dockerfile with $base only."
           fi
@@ -133,6 +129,8 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
+      # Records each successful core deploy for the changes job.
+      deployments: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -242,6 +240,16 @@ jobs:
             echo "::error title=Live core version differs::arkhiv-api.subcult.tv reports $live, pinned $CORE_VERSION"; exit 1
           fi
           printf 'arkhiv-api.subcult.tv runs core %s from %s\n' "$live" "$DEPLOY_REVISION"
+      - name: Record the core deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The changes job compares deploy/core.Dockerfile with this commit.
+          id=$(printf '{"ref":"%s","task":"deploy:core","environment":"production","auto_merge":false,"required_contexts":[],"description":"core %s"}' \
+            "$DEPLOY_REVISION" "$CORE_VERSION" | gh api -X POST "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
+          gh api -X POST "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" -f state=success --silent
+          echo "Recorded deploy:core deployment $id for $DEPLOY_REVISION"
       - name: Remove the core deploy key
         if: always()
         run: rm -rf "$RUNNER_TEMP/core-deploy"
