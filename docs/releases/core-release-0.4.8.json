@@ -1,0 +1,60 @@
+{
+  "contract_version": 1,
+  "artifact_kind": "core",
+  "configuration_version": 1,
+  "api_versions": [
+    "1"
+  ],
+  "media": [
+    "print",
+    "audio",
+    "video"
+  ],
+  "modules": {
+    "catalog": "1",
+    "print": "1",
+    "audio": "1",
+    "video": "1",
+    "personal": "1",
+    "chat": "1",
+    "source_catalog": "1",
+    "source_discovery": "1",
+    "source_artist_photos": "1",
+    "source_artist_media": "1"
+  },
+  "engine_repository": "git.subcult.tv/subculture-collective/archive-core",
+  "schema_strategy": "checksum-locked-additive-migrations",
+  "compatibility_window": "current and previous reviewed release",
+  "rollout": "reviewed-per-consumer",
+  "version": "0.4.8",
+  "engine_digest": "git.subcult.tv/subculture-collective/archive-core@sha256:869a7309d0d72b8cb312fdf0421f695460753ddb9da75c25077cd841b5126871",
+  "source_revision": "0b270c3f1ca3b1f019e92f1923ece6306275bf47",
+  "optional_migrations": {
+    "community/0001_personal_chat.sql": "718cc0d07c225d3743c2890bded533bf82fb4866a23b94932faf88c56a619c32",
+    "community/0002_media_rooms.sql": "1816b036ed8fdd9fa2c6e5a608b836eabfaea9677e57e33df351e7ab708f7990"
+  },
+  "migrations": {
+    "0001_metadata.sql": "a4db4802a66764c56b3a77c128b27e608b1f3a5767f3482464700b9bbe744537",
+    "0002_local_preservation.sql": "cbe2dda6e3a5b20db392bf63269faaaa08f6f44550ea7f0831b229eba9b7a3e2",
+    "0003_file_based_sources.sql": "48f2cc4d492a10512fb5644365a26cce856e87f1328dbedfa7a943064faf3043",
+    "0004_budget_reviews.sql": "0904c5f0a2fb8367dc21128e31e1e86fa1371593d76aa674f4cb43161f13acb9",
+    "0005_mixed_catalog.sql": "e8453b33e9f3cf0a699e9a3ae2e93d0b735ad7447140c420a0a0c5d8c1c137d5",
+    "0006_representation_access.sql": "28319c6c1496c68cad0841ec1101eda3aab867623a81d206748f7124e72112e2",
+    "0007_print_index.sql": "0c1862e537f6973df263e21d9a36ec39a7014016418d8a111232ef831b452aaf",
+    "0008_audio_assets.sql": "867623113670cc52185c5ad0a470b2c387365212601243e97cf564df8ca307fc",
+    "0009_public_reviews.sql": "50671a0c6d75ff914290682c62df1f43e50a45ee616bb36ac2386fa94245d04b",
+    "0010_curation_drafts.sql": "c2b3a5f398eeb1286ca912f4f86c15154a47a238aa93d225414df1da8e6c41f3",
+    "0011_retained_inventory.sql": "46eb1e7de42617d6067c6c1d63ca66ea04b2088c387b09aeed96dd5c31807abf",
+    "0012_retained_print_indexes.sql": "afbe6d0655f2844897d692803c13ec6f3bf64dd8f2bf1d47de1eea5c5a812965",
+    "0013_private_processed_video.sql": "7005e09d92eb21270529b5ffa27fb570194227fc9effc7be7f7a9cc8c13a5c0b",
+    "0014_source_catalog.sql": "ee79504cf3c5db6a536470452ca90935c7763340e4915f10dc94e17c873670b1",
+    "0015_source_audio_reviews.sql": "b959bb42808dd7d2ec576865386df5818d202370cf1308a632f9fd2a4954e993",
+    "0016_source_catalog_exclusions.sql": "5c38ac16f3230d077cbd9bc34fe21d6201f27767a3d7b7ee6ed67095379bbe3e",
+    "0017_source_discovery.sql": "d3fc8c7376ab065bcaa251069f4f7f9d0c56bd635c4b90e10c0a719fe4b20ffd",
+    "0018_source_artist_media.sql": "e196db61453fff53c5e746200386beca72bbe3e5df8e4baa5bc966bbc9cefe3b",
+    "0019_catalog_labels.sql": "2fb0380c3fb587de14251b94ccab6a6da43a101e03704ba7f0f1383ce589fa3a",
+    "0020_source_catalog_sample.sql": "65176d634943a0454324f4500d683fa9f615142895c6b5cc013fab86a83d7c4d",
+    "0021_source_type_classification.sql": "8838dcd3af040d0a9cd08a28b21a1929524bd81cd739ea51f39bf8959a603e81",
+    "0022_source_popularity.sql": "9ab04bbd78df0fecccfb7d509403a60d1931a03bc805f57659a7f4a9938f98ae"
+  }
+}
