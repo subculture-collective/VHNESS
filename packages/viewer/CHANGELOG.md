@@ -1,3 +1,11 @@
+## 0.4.8
+
+`usePersonal` and the chat hooks read `community` from `/api/version` once per
+page. When the engine says accounts or chat are off, they skip the account
+session request or stop polling the chat room, instead of requesting routes
+that answer 404 (chat retried every minute). Engines that do not report
+`community` (before core 0.4.9) are probed as before.
+
 ## 0.4.7
 
 Catalog filters accept `label` (an accepted label ID) and `text` (archive-wide

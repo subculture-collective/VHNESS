@@ -102,3 +102,10 @@ func (s *Server) communityCurrent(ctx context.Context, collection string) (*comm
 	}
 	return &community.Program{Revision: state.Revision, Start: state.Program.Start, Episode: state.Program.EpisodeID, OriginalDate: state.Episode.Date}, nil
 }
+
+// communityFeatures tells clients whether accounts and chat run here, so they
+// need not probe routes that answer 404 when the community module is off.
+func (s *Server) communityFeatures() map[string]bool {
+	c := s.Community
+	return map[string]bool{"personal": c != nil, "chat": c != nil && (c.ChatRead || c.AudioChatRead)}
+}

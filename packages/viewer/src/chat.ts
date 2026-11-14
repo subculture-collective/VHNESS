@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PersonalError, personalRequest, type Personal } from './personal.js';
+import { communityFeatures } from './community.js';
 import type { Session } from './model.js';
 import type { StationSession } from './useAudioStation.js';
 
@@ -57,13 +58,17 @@ function useReplayChat(collection: string, session: ChatContext | null, paused: 
     setReports([]); setBlocked([]); setRoom(null); setMessages([]);
     const token = generation.current;
     if (personal.user) void personalRequest<{ blocked: string[] }>('/api/chat/v1/blocks').then(result => { if (generation.current === token) setBlocked(result.blocked); }).catch(reason => { if (generation.current === token) setError(reasonMessage(reason)); });
-    let stopped = false, inFlight = false, failures = 0;
+    let stopped = false, inFlight = false, failures = 0, disabled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       if (stopped || inFlight) return; inFlight = true;
-      try { await refresh(); failures = 0; }
+      try {
+        // An engine that says chat is off is not polled at all.
+        if ((await communityFeatures()).chat === false) { disabled = true; if (!stopped) { setEnabled(false); setRoom(null); setMessages([]); } return; }
+        await refresh(); failures = 0;
+      }
       catch (reason) { if (!stopped) { if (reason instanceof PersonalError && reason.status === 404) { setEnabled(false); setRoom(null); setMessages([]); } else setError(reasonMessage(reason)); failures++; } }
-      finally { inFlight = false; if (!stopped) timer = setTimeout(() => { void poll(); }, Math.min(60_000, 10_000 * 2 ** Math.min(failures, 3))); }
+      finally { inFlight = false; if (!stopped && !disabled) timer = setTimeout(() => { void poll(); }, Math.min(60_000, 10_000 * 2 ** Math.min(failures, 3))); }
     };
     void poll(); return () => { stopped = true; generation.current++; clearTimeout(timer); };
   }, [refresh, personal.user?.id]);
