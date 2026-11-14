@@ -1,3 +1,19 @@
+## 0.4.13
+
+The root entry exports the viewer tools that the Bill Nye and Democracy Now!
+video sites each kept as an identical `ViewerTools.tsx`: `VideoTools` (theater
+mode and sharing), `useTheater`, `episodeLink`, `useViewerLinks` (opens shared
+episode and channel links), `AccountPanel`, `FavoriteAction`, `FavoriteShelf`,
+`ChatPanel` and `useLibraryLayout`. Markup, class names, text and storage keys
+are unchanged, so the sites' CSS and saved layouts keep working. `AccountPanel`
+takes the product name as `product`; `FavoriteShelf` takes an optional
+`artworkFallback` (default `ARCHIVE`). Sites can delete their copy and import
+these from `@subcult/archive-viewer`.
+
+One behaviour change from the site copy: `useViewerLinks` cancels the previous
+shared-episode lookup on each Back/Forward navigation, so a slow earlier
+request can no longer start the wrong episode.
+
 ## 0.4.12
 
 The catalog entry covers series. `CatalogLabelKind` includes `series`, and item
