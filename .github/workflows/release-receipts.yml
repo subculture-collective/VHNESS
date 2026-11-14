@@ -15,6 +15,7 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
+  checks: write
 concurrency:
   group: release-receipts
   cancel-in-progress: false
@@ -23,7 +24,7 @@ jobs:
     name: Record published releases
     if: github.repository == 'subculture-collective/arkhiv'
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +55,22 @@ jobs:
           url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null || gh pr create --base main --head "$branch" --title "Record published release receipts" \
             --body "Receipts written by the Release receipts workflow from the artifacts Gitea Actions published for \`$GITHUB_SHA\`.")
           # Pushes and pull requests made with this token start no workflows, so
-          # run the required Mirror CI check explicitly, then let it merge.
+          # run Mirror CI explicitly. GitHub does not link a dispatched run to the
+          # pull request, so once it passes, record its result as the required
+          # "Mirror CI gate" check on the branch head, then let the PR merge.
+          head=$(git rev-parse HEAD)
           gh workflow run mirror-ci.yml --ref "$branch"
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id=$(gh run list --workflow mirror-ci.yml --branch "$branch" --event workflow_dispatch --commit "$head" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status --interval 30 > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name='Mirror CI gate' -f head_sha="$head" \
+            -f status=completed -f conclusion=success \
+            -f details_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id" \
+            -f 'output[title]=Mirror CI passed' -f "output[summary]=Dispatched Mirror CI run $run_id passed on $head." > /dev/null
           gh pr merge --auto --squash "$url"
           echo "$url"

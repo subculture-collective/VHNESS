@@ -52,9 +52,11 @@ artifact, reading the registries anonymously. For the core image it accepts the
 bump commit or a later `main` commit whose image labels name that revision and
 version. It then writes the receipt with `scripts/core_release.py` or
 `scripts/viewer_receipt.py` (the viewer receipt keeps the previous compatible
-core) and opens a `release/receipts-<sha>` pull request. Because its token
-starts no workflows, it dispatches Mirror CI on that branch and enables
-auto-merge. Each merged receipt starts the consumer proposals described in
+core) and opens a `release/receipts-<sha>` pull request with commits authored
+by `github-actions[bot]`. Because its token starts no workflows, it dispatches
+Mirror CI on that branch; GitHub does not link a dispatched run to the pull
+request, so when that run passes the job records it as the required `Mirror CI
+gate` check on the branch head and enables auto-merge. Each merged receipt starts the consumer proposals described in
 [consumer upgrades](consumer-upgrades.md).
 
 ## Independent SDK patches
