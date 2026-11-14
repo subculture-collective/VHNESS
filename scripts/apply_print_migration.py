@@ -173,42 +173,41 @@ def describe(step):
     return ''
 
 
-def apply(directory, run, state, receipt_path, notes=None, budget=None, reserve=None, environ=os.environ, now=None, log=print):
-    """Run every missing step in order. `run(argv)` returns an exit code; `state` reads the database."""
-    now = now or (lambda: datetime.now(timezone.utc).isoformat(timespec='seconds'))
-    plan_file = directory / 'migration-plan.json'
-    plan_sha = digest(plan_file.read_bytes())
-    receipt = {'plan': str(plan_file), 'plan_sha256': plan_sha, 'started_at': now(), 'status': 'failed', 'steps': []}
+def run_steps(steps, run, check, receipt, log=print):
+    """Run each step whose input the database lacks, in order, recording outcomes in receipt['steps'].
+
+    `check(step)` returns 'missing', 'present' or a difference message. Raises ApplyError at the first
+    difference or failure, leaving the failed step's outcome to the caller."""
+    for number, step in enumerate(steps, 1):
+        entry = {'step': number, 'command': step['command'], 'target': describe(step)}
+        if 'file' in step:
+            entry.update(input=step['file'].name, input_sha256=step['sha256'])
+        receipt['steps'].append(entry)
+        if step['command'] == 'migrate':
+            found = 'missing'  # migrate applies only pending migrations; rerunning it is a no-op
+        else:
+            found = check(step)
+        if found == 'missing' and step['command'] == 'collection' and step['budget'] is None:
+            found = 'collection is not configured; pass --budget and --reserve to create it'
+        if found == 'present':
+            entry['outcome'] = 'unchanged'
+            log('unchanged', step['command'], entry['target'])
+            continue
+        if found != 'missing':
+            raise ApplyError('Step %d %s %s: %s' % (number, step['command'], entry['target'], found))
+        code = run([step['command']] + step['args'])
+        if code != 0:
+            raise ApplyError('Step %d %s %s failed with exit code %d' % (number, step['command'], entry['target'], code))
+        if step['command'] != 'migrate' and check(step) != 'present':
+            raise ApplyError('Step %d %s %s succeeded but the database does not hold its input' % (number, step['command'], entry['target']))
+        entry['outcome'] = 'ran' if step['command'] == 'migrate' else 'applied'
+        log(entry['outcome'], step['command'], entry['target'])
+
+
+def record(receipt, receipt_path, work, now):
+    """Run work(), then write receipt to a new 0600 file. Errors stop the run and are recorded."""
     try:
-        _, steps = plan_steps(directory, notes or 'Applied print migration plan ' + plan_sha, budget, reserve)
-        if any(s['command'] == 'restore-print-index' for s in steps):
-            unset = [name for name in ('VHNESS_MEDIA', 'VHNESS_DERIVATIVES') if not environ.get(name)]
-            if unset:
-                raise ApplyError('Set ' + ' and '.join(unset) + ' to the recovered archive root before restoring print indexes')
-        for number, step in enumerate(steps, 1):
-            entry = {'step': number, 'command': step['command'], 'target': describe(step)}
-            if 'file' in step:
-                entry.update(input=step['file'].name, input_sha256=step['sha256'])
-            receipt['steps'].append(entry)
-            if step['command'] == 'migrate':
-                found = 'missing'  # migrate applies only pending migrations; rerunning it is a no-op
-            else:
-                found = current_state(state, step)
-            if found == 'missing' and step['command'] == 'collection' and step['budget'] is None:
-                found = 'collection is not configured; pass --budget and --reserve to create it'
-            if found == 'present':
-                entry['outcome'] = 'unchanged'
-                log('unchanged', step['command'], entry['target'])
-                continue
-            if found != 'missing':
-                raise ApplyError('Step %d %s %s: %s' % (number, step['command'], entry['target'], found))
-            code = run([step['command']] + step['args'])
-            if code != 0:
-                raise ApplyError('Step %d %s %s failed with exit code %d' % (number, step['command'], entry['target'], code))
-            if step['command'] != 'migrate' and current_state(state, step) != 'present':
-                raise ApplyError('Step %d %s %s succeeded but the database does not hold its input' % (number, step['command'], entry['target']))
-            entry['outcome'] = 'ran' if step['command'] == 'migrate' else 'applied'
-            log(entry['outcome'], step['command'], entry['target'])
+        work()
         receipt['status'] = 'complete'
     except (ApplyError, OSError, ValueError, KeyError) as error:
         receipt['failure'] = str(error) if isinstance(error, ApplyError) else '%s: %s' % (type(error).__name__, error)
@@ -222,6 +221,23 @@ def apply(directory, run, state, receipt_path, notes=None, budget=None, reserve=
             handle.write(json.dumps(receipt, indent=2) + '\n')
         os.chmod(receipt_path, 0o600)
     return receipt
+
+
+def apply(directory, run, state, receipt_path, notes=None, budget=None, reserve=None, environ=os.environ, now=None, log=print):
+    """Run every missing step in order. `run(argv)` returns an exit code; `state` reads the database."""
+    now = now or (lambda: datetime.now(timezone.utc).isoformat(timespec='seconds'))
+    plan_file = directory / 'migration-plan.json'
+    plan_sha = digest(plan_file.read_bytes())
+    receipt = {'plan': str(plan_file), 'plan_sha256': plan_sha, 'started_at': now(), 'status': 'failed', 'steps': []}
+
+    def work():
+        _, steps = plan_steps(directory, notes or 'Applied print migration plan ' + plan_sha, budget, reserve)
+        if any(s['command'] == 'restore-print-index' for s in steps):
+            unset = [name for name in ('VHNESS_MEDIA', 'VHNESS_DERIVATIVES') if not environ.get(name)]
+            if unset:
+                raise ApplyError('Set ' + ' and '.join(unset) + ' to the recovered archive root before restoring print indexes')
+        run_steps(steps, run, lambda step: current_state(state, step), receipt, log)
+    return record(receipt, receipt_path, work, now)
 
 
 class PsqlState:
