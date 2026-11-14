@@ -37,7 +37,7 @@ Release builds set the core version and revision through the `CORE_VERSION` and
 
 | Capability | HTTP contract |
 | --- | --- |
-| Browse collections and mixed items | `GET /api/catalog/v1/collections`, `GET /api/catalog/v1/items`, `GET /api/catalog/v1/items/{id}` |
+| Browse collections and mixed items | `GET /api/catalog/v1/collections`, `GET /api/catalog/v1/items`, `GET /api/catalog/v1/items/{id}`, `GET /api/catalog/v1/creators` |
 | Resolve a reviewed representation | `GET /api/catalog/v1/items/{id}/representations/{representation}/resolve` |
 | Read a local original or permitted download | The resolver's access-checked media URL, including Range requests |
 | Print status, search and cover | Representation `/print`, `/search` and `/cover` endpoints |

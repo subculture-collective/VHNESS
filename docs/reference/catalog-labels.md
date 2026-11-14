@@ -57,8 +57,10 @@ The print compatibility routes also serve series:
   series label, in issue order. A malformed slug returns 400.
 - Every document carries `series`: `[{slug, name, issue_position, issue_label}]`,
   empty when it belongs to no series.
-- `GET /api/facets` returns `{"subjects": [...], "series": [{slug, name}]}`,
-  listing accepted series on published documents in the collection.
+- `GET /api/facets` returns `{"subjects": [...], "series": [{slug, name}], "creators": [{name, items}]}`,
+  listing accepted series on published documents in the collection. Creators
+  (core 0.4.11) follow the [creator facet](mixed-catalog.md) rules, counting
+  published documents and keeping the spelling of the first document by title.
 
 Evidence is stored for review and is not exposed by the API. Keep generated
 proposals reproducible: record the method version and the inputs it read.

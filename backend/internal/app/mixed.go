@@ -68,3 +68,17 @@ func (s *Server) mixedLabels(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, labels)
 }
+
+func (s *Server) mixedCreators(w http.ResponseWriter, r *http.Request) {
+	collection := r.URL.Query().Get("collection")
+	if collection != "" && !s.allowsCollection(collection) {
+		write(w, 404, map[string]string{"error": "collection unavailable"})
+		return
+	}
+	creators, err := s.DB.CatalogCreators(r.Context(), s.collectionScope(), collection)
+	if err != nil {
+		write(w, 503, map[string]string{"error": "catalog unavailable"})
+		return
+	}
+	write(w, 200, creators)
+}

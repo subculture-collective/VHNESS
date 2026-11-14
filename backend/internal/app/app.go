@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/catalog/v1/items", s.mixedCatalog)
 	mux.HandleFunc("GET /api/catalog/v1/collections", s.mixedCollections)
 	mux.HandleFunc("GET /api/catalog/v1/labels", s.mixedLabels)
+	mux.HandleFunc("GET /api/catalog/v1/creators", s.mixedCreators)
 	mux.HandleFunc("GET /api/catalog/v1/items/{id}", s.mixedCatalog)
 	mux.HandleFunc("GET /api/catalog/v1/items/{id}/representations/{representation}/resolve", s.resolveRepresentation)
 	mux.HandleFunc("GET /api/catalog/v1/items/{id}/representations/{representation}/media", s.representationMedia)

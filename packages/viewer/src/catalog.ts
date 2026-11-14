@@ -16,6 +16,8 @@ export type CatalogLabel = CatalogItemLabel & { items: number };
 export type CatalogTextHit = { representation: string; page: number; snippet: string };
 export type CatalogItem = { id: string; title: string; description: string; date: string; creator: string; collections: string[]; representations: CatalogRepresentation[]; labels?: CatalogItemLabel[]; text_hits?: CatalogTextHit[] };
 export type CatalogPage = { items: CatalogItem[]; total: number; page: number; search_coverage: string[] };
+/** A person credited on visible items; `items` counts the items that credit them. */
+export type CatalogCreator = { name: string; items: number };
 export type CatalogCollection = { id: string; title: string; policy: string; items: number; media: CatalogMedia[] };
 export type CatalogFilter = { collection: string; media: CatalogMedia | ''; query: string; page: number; creator?:string; dateFrom?:string; dateTo?:string; label?:string; text?:string };
 export type RepresentationTransport = {media:CatalogMedia;policy:string;url:string;source_url:string;source_provider?:string;file:string};
@@ -70,6 +72,13 @@ export function catalogLabelsURL(collection: string, kind?: CatalogLabelKind): s
   if (kind) params.set('kind', kind);
   return `/api/catalog/v1/labels${params.size ? `?${params}` : ''}`;
 }
+/**
+ * People credited on items visible in a collection (core 0.4.11). Shared credits
+ * are split on commas and spellings that differ only in case are one person.
+ */
+export function catalogCreatorsURL(collection: string): string {
+  return collection ? `/api/catalog/v1/creators?${new URLSearchParams({collection})}` : '/api/catalog/v1/creators';
+}
 export async function catalogRequest<T>(url: string, signal: AbortSignal, timeoutMs = 10000): Promise<T> {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) throw new Error('Invalid request timeout.');
   const deadline = AbortSignal.timeout(timeoutMs);
@@ -87,19 +96,29 @@ export function representationPath(item: CatalogItem, representation: CatalogRep
 }
 
 // Hide an old response immediately, including the render before effect cleanup.
-export function useCatalog(filter: CatalogFilter) {
-  const url = catalogURL(filter);
-  const [result,setResult] = useState<{url: string; page?: CatalogPage; error?: string}>();
+function useCatalogResource<T>(url: string) {
+  const [result,setResult] = useState<{url: string; data?: T; error?: string}>();
   const [attempt,setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    void catalogRequest<CatalogPage>(url,controller.signal).then(page => {
-      if (!controller.signal.aborted) setResult({url,page});
+    void catalogRequest<T>(url,controller.signal).then(data => {
+      if (!controller.signal.aborted) setResult({url,data});
     }).catch(reason => { if (!controller.signal.aborted) setResult({url,error: reason instanceof Error ? reason.message : 'The archive is unavailable.'}); });
     return () => controller.abort();
   },[url,attempt]);
   const current = result?.url === url ? result : undefined;
-  return {page: current?.page, error: current?.error, pending: !current, retry: () => {setResult(undefined);setAttempt(value=>value+1);} };
+  return {data: current?.data, error: current?.error, pending: !current, retry: () => {setResult(undefined);setAttempt(value=>value+1);} };
+}
+
+export function useCatalog(filter: CatalogFilter) {
+  const {data, ...state} = useCatalogResource<CatalogPage>(catalogURL(filter));
+  return {page: data, ...state};
+}
+
+/** Creator suggestions for a collection, served by the core instead of read from the whole catalog. */
+export function useCatalogCreators(collection: string) {
+  const {data, ...state} = useCatalogResource<CatalogCreator[]>(catalogCreatorsURL(collection));
+  return {creators: data, ...state};
 }
 
 // Bookmarks name the logical item; access to a representation is resolved later.
