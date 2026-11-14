@@ -10,7 +10,7 @@ import time
 import unittest
 import urllib.request
 
-from apply_print_migration import ApplyError, PsqlState, apply, libpq_env
+from apply_print_migration import ApplyError, PsqlState, apply, libpq_env, plan_steps
 from prepare_print_migration import prepare
 
 COLLECTION = 'fixture-zines'
@@ -48,7 +48,8 @@ def build_fixture(root):
     catalog = {
         'assets': assets,
         'collections': [{'id': COLLECTION, 'config': {'name': 'Fixture Zines', 'accent': '#b3261e',
-                                                       'introduction': 'Synthetic retained print collection'}}],
+                                                       'introduction': 'Synthetic retained print collection',
+                                                       'limits': {'total_bytes': 157286400}}}],
         'documents': [{**document, 'id': DOCUMENT, 'published': True, 'metadata': {'title': 'Fixture zine', 'date': '1994-05-01'}},
                       {**document, 'id': UNPUBLISHED, 'published': False, 'metadata': {'title': 'Unpublished draft'}}],
         'variants': [{'id': READ, 'document_id': DOCUMENT, 'filename': 'read.pdf', 'asset_sha': assets[0]['sha256'], 'source_snapshot': legacy_id, 'kind': 'read'},
@@ -225,7 +226,11 @@ class ApplyPrintMigrationTests(unittest.TestCase):
         self.assertIn('catalog item differs', receipt['failure'])
         self.assertNotIn('import-catalog', self.commands())
 
-    def test_missing_collection_needs_explicit_limits(self):
+    def test_plan_without_limits_needs_explicit_limits(self):
+        plan_file = self.inputs / 'migration-plan.json'
+        plan = json.loads(plan_file.read_text())
+        del plan['collection_limits']  # prepared before plans recorded legacy limits
+        plan_file.write_text(json.dumps(plan))
         receipt = self.apply(budget=None, reserve=None)
         self.assertEqual(receipt['status'], 'failed')
         self.assertIn('--budget and --reserve', receipt['failure'])
@@ -236,6 +241,39 @@ class ApplyPrintMigrationTests(unittest.TestCase):
         receipt = self.apply()
         self.assertIn('review-budget', receipt['failure'])
         self.assertEqual(self.commands(), ['migrate'])
+
+    def test_plan_limits_create_the_collection(self):
+        receipt = self.apply(budget=None, reserve=None)
+        self.assertEqual(receipt['status'], 'complete', receipt.get('failure'))
+        self.assertEqual(self.db.tables['collections'][COLLECTION],
+                         {'policy': 'local_preserve', 'budget': 157286400, 'reserve': 2 << 30})
+        step = next(s for s in receipt['steps'] if s['command'] == 'collection')
+        self.assertEqual((step['budget'], step['reserve'], step['limits_from']), (157286400, 2 << 30, 'plan'))
+        rerun = self.apply(budget=None, reserve=None)
+        self.assertEqual(rerun['counts']['applied'], 0)
+
+    def test_budget_and_reserve_override_plan_limits(self):
+        receipt = self.apply(budget=8 << 30, reserve=1 << 30)
+        self.assertEqual(self.db.tables['collections'][COLLECTION]['budget'], 8 << 30)
+        step = next(s for s in receipt['steps'] if s['command'] == 'collection')
+        self.assertEqual((step['reserve'], step['limits_from']), (1 << 30, 'override'))
+        # A later run on the plan's own limits stops instead of changing the collection.
+        receipt = self.apply(budget=None, reserve=None)
+        self.assertIn('review-budget', receipt['failure'])
+
+    def test_each_collection_gets_its_own_plan_limits(self):
+        plan_file = self.inputs / 'migration-plan.json'
+        plan = json.loads(plan_file.read_text())
+        plan['collections']['a-info-zines'] = {}
+        plan['collection_limits']['a-info-zines'] = {'budget': 5, 'reserve': 3}
+        plan_file.write_text(json.dumps(plan))
+        retained = self.inputs / ('retained-export-' + COLLECTION + '.json')
+        (self.inputs / 'retained-export-a-info-zines.json').write_bytes(retained.read_bytes())
+        _, steps = plan_steps(self.inputs, 'notes')
+        self.assertEqual({s['collection']: (s['budget'], s['reserve']) for s in steps if s['command'] == 'collection'},
+                         {'a-info-zines': (5, 3), COLLECTION: (157286400, 2 << 30)})
+        _, steps = plan_steps(self.inputs, 'notes', budget=7, reserve=1)
+        self.assertEqual({(s['budget'], s['reserve']) for s in steps if s['command'] == 'collection'}, {(7, 1)})
 
     def test_index_restore_requires_recovered_roots(self):
         self.env = {}
@@ -314,10 +352,10 @@ class FixtureDatabaseTests(unittest.TestCase):
             tables = state.query("SELECT json_agg(tablename ORDER BY tablename) FROM pg_tables WHERE schemaname='public';")
             return {t: state.query('SELECT json_build_object(\'rows\',count(*),\'md5\',md5(COALESCE(string_agg(x::text,\',\' ORDER BY x::text),\'\'))) FROM "%s" x;' % t) for t in tables}
 
-        first = apply(inputs, run, state, root / 'first.json', budget=1 << 20, reserve=1, environ=env)
+        first = apply(inputs, run, state, root / 'first.json', environ=env)  # the plan's legacy limits
         self.assertEqual(first['status'], 'complete', first.get('failure'))
         before = fingerprint()
-        second = apply(inputs, run, state, root / 'second.json', budget=1 << 20, reserve=1, environ=env)
+        second = apply(inputs, run, state, root / 'second.json', environ=env)
         self.assertEqual(second['status'], 'complete', second.get('failure'))
         self.assertEqual(second['counts']['applied'], 0)
         self.assertEqual(fingerprint(), before)

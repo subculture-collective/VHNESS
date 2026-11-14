@@ -61,6 +61,26 @@ class PrintMigrationTests(unittest.TestCase):
         self.assertEqual(item['representations'][0]['snapshot_sha256'], source['sha256'])
         self.assertEqual(item['editorial']['legacy_variants'][0]['source_snapshot'], source['legacy_snapshot_id'])
 
+    def test_records_each_collection_legacy_limits(self):
+        self.catalog['collections'].append({'id': 'a-info-zines', 'config': {
+            'limits': {'total_bytes': 157286400}, 'updates': {'minimum_free_bytes': 4 << 30}}})
+        self.catalog_file.write_text(json.dumps(self.catalog))
+        restore = json.loads(self.restore_file.read_text())
+        restore['table_counts']['collections'] = 2
+        self.restore_file.write_text(json.dumps(restore))
+        plan = self.run_prepare()
+        self.assertEqual({c: (v['budget'], v['reserve']) for c, v in plan['collection_limits'].items()},
+                         {'zines': (1024, 2 << 30), 'a-info-zines': (157286400, 4 << 30)})
+        saved = json.loads((self.root / 'output/migration-plan.json').read_text())
+        self.assertEqual(saved['collection_limits'], plan['collection_limits'])
+
+    def test_collection_without_legacy_limits_is_rejected(self):
+        self.catalog['collections'][0]['config'] = {}
+        self.catalog_file.write_text(json.dumps(self.catalog))
+        with self.assertRaisesRegex(ValueError, 'limits.total_bytes'):
+            self.run_prepare()
+        self.assertFalse((self.root / 'output').exists())
+
     def test_database_only_unreferenced_history_is_retained_without_fabricated_bytes(self):
         self.catalog['source_snapshots'].append({'id': 'f' * 64, 'item_id': 'retained-source', 'raw': {'history': True}})
         self.catalog_file.write_text(json.dumps(self.catalog))

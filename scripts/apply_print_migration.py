@@ -51,9 +51,19 @@ def plan_steps(directory, notes, budget=None, reserve=None):
 
     steps = [{'command': 'migrate', 'args': []}]
     for collection in collections:
-        steps.append({'command': 'collection', 'collection': collection, 'budget': budget, 'reserve': reserve,
+        # --budget and --reserve override every collection; otherwise each keeps the
+        # legacy limits prepare recorded; a plan without them needs the collection to exist.
+        limits = plan.get('collection_limits', {}).get(collection)
+        if budget is not None:
+            source, limit = 'override', (budget, reserve)
+        elif limits:
+            source, limit = 'plan', (limits['budget'], limits['reserve'])
+        else:
+            source, limit = None, (None, None)
+        steps.append({'command': 'collection', 'collection': collection, 'budget': limit[0], 'reserve': limit[1],
+                      'limits_from': source,
                       'args': ['--collection', collection, '--policy', 'local_preserve',
-                               '--budget', str(budget), '--reserve', str(reserve)]})
+                               '--budget', str(limit[0]), '--reserve', str(limit[1])]})
     for collection in collections:
         path, raw = read('retained-export-' + collection + '.json')
         steps.append({'command': 'retain-legacy', 'collection': collection, 'file': path, 'sha256': digest(raw),
@@ -182,13 +192,15 @@ def run_steps(steps, run, check, receipt, log=print):
         entry = {'step': number, 'command': step['command'], 'target': describe(step)}
         if 'file' in step:
             entry.update(input=step['file'].name, input_sha256=step['sha256'])
+        if step.get('limits_from'):
+            entry.update(budget=step['budget'], reserve=step['reserve'], limits_from=step['limits_from'])
         receipt['steps'].append(entry)
         if step['command'] == 'migrate':
             found = 'missing'  # migrate applies only pending migrations; rerunning it is a no-op
         else:
             found = check(step)
         if found == 'missing' and step['command'] == 'collection' and step['budget'] is None:
-            found = 'collection is not configured; pass --budget and --reserve to create it'
+            found = 'collection is not configured and the plan records no legacy limits; pass --budget and --reserve to create it'
         if found == 'present':
             entry['outcome'] = 'unchanged'
             log('unchanged', step['command'], entry['target'])
@@ -341,8 +353,10 @@ def main():
     parser.add_argument('--vhness', default='vhness', help='Operator command prefix, for example "docker compose exec -T api vhness"')
     parser.add_argument('--psql', default='psql', help='Read-only psql command prefix for state checks')
     parser.add_argument('--notes', help='Review notes recorded by retain-legacy and import-catalog')
-    parser.add_argument('--budget', type=int, help='Local byte budget when the collection does not exist yet')
-    parser.add_argument('--reserve', type=int, help='Free-space reserve when the collection does not exist yet')
+    parser.add_argument('--budget', type=int,
+                        help='Byte budget for every collection in the plan, overriding the legacy limits the plan records')
+    parser.add_argument('--reserve', type=int,
+                        help='Free-space reserve for every collection in the plan, overriding the legacy limits the plan records')
     args = parser.parse_args()
     if (args.budget is None) != (args.reserve is None):
         parser.error('--budget and --reserve go together')
