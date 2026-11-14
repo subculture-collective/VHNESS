@@ -209,4 +209,46 @@ func TestAutomaticPublicAccessIntegration(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM collection_public_access_history WHERE collection_id=$1`, c.ID).Scan(&decisions); err != nil || decisions != 4 {
 		t.Fatal("decision history", decisions, err)
 	}
+
+	// A decision waits for a representation lock before it takes the collection
+	// lock, so a rebind holding the representation can still lock the collection.
+	if _, err = operator.ReviewAutomaticPublicAccess(ctx, c.ID, false, "Owner withdrew automatic access again"); err != nil {
+		t.Fatal(err)
+	}
+	rebind, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rebind.Rollback(ctx)
+	if _, err = rebind.Exec(ctx, `SET LOCAL lock_timeout='5s'; SELECT 1 FROM catalog_representations WHERE item_id='automatic' AND id='pdf' FOR UPDATE`); err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		result AutomaticAccessResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		r, err := operator.ReviewAutomaticPublicAccess(ctx, c.ID, true, "Owner restored automatic access during a rebind")
+		done <- outcome{r, err}
+	}()
+	for waiting, tries := 0, 0; waiting == 0; tries++ {
+		if tries > 100 {
+			t.Fatal("automatic decision never waited for the representation lock")
+		}
+		time.Sleep(50 * time.Millisecond)
+		if err = admin.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%FOR UPDATE OF r%'`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = rebind.Exec(ctx, `SELECT 1 FROM collections WHERE id=$1 FOR UPDATE`, c.ID); err != nil {
+		t.Fatal("collection lock behind a waiting automatic decision", err)
+	}
+	if err = rebind.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if o := <-done; o.err != nil || o.result.Approved != 1 {
+		t.Fatalf("automatic decision after rebind: %+v %v", o.result, o.err)
+	}
+	publicItems("automatic", "manual", "withdrawn")
 }

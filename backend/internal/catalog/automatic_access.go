@@ -45,6 +45,13 @@ func (d *DB) ReviewAutomaticPublicAccess(ctx context.Context, collection string,
 		return result, err
 	}
 	defer tx.Rollback(ctx)
+	// Lock representations before the collection, the order RebindRepresentation
+	// and checkTransportTx use. Every transport review writer holds the
+	// representation lock, so the candidate query below reads current reviews.
+	if _, err = tx.Exec(ctx, `SELECT 1 FROM catalog_representations r JOIN catalog_representation_memberships rm ON rm.item_id=r.item_id AND rm.representation_id=r.id
+ WHERE rm.collection_id=$1 AND r.media='print' ORDER BY r.item_id,r.id FOR UPDATE OF r`, collection); err != nil {
+		return result, err
+	}
 	if err = tx.QueryRow(ctx, `SELECT id FROM collections WHERE id=$1 FOR UPDATE`, collection).Scan(&collection); err != nil {
 		return result, fmt.Errorf("unknown collection: %w", err)
 	}
@@ -63,7 +70,7 @@ func (d *DB) ReviewAutomaticPublicAccess(ctx context.Context, collection string,
 	query := `SELECT t.item_id,t.representation_id,t.review,t.preservation,r.source_hash,false,false,false,false
  FROM representation_transport_reviews t JOIN catalog_representations r ON r.item_id=t.item_id AND r.id=t.representation_id
  WHERE t.collection_id=$1 AND t.automatic_access IS NOT NULL AND t.review @> '{"public":true}'::jsonb
- ORDER BY t.item_id,t.representation_id FOR UPDATE OF t`
+ ORDER BY t.item_id,t.representation_id`
 	if automatic {
 		query = `SELECT t.item_id,t.representation_id,t.review,t.preservation,r.source_hash,
  m.listed AND rm.listed,
@@ -76,7 +83,7 @@ func (d *DB) ReviewAutomaticPublicAccess(ctx context.Context, collection string,
  JOIN catalog_representation_memberships rm ON rm.item_id=t.item_id AND rm.representation_id=t.representation_id AND rm.collection_id=t.collection_id
  JOIN catalog_memberships m ON m.item_id=t.item_id AND m.collection_id=t.collection_id
  WHERE t.collection_id=$1 AND r.media='print' AND NOT t.review @> '{"public":true}'::jsonb
- ORDER BY t.item_id,t.representation_id FOR UPDATE OF t`
+ ORDER BY t.item_id,t.representation_id`
 	}
 	rows, err := tx.Query(ctx, query, collection)
 	if err != nil {
