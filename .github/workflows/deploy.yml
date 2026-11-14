@@ -7,7 +7,7 @@ run-name: Deploy ${{ github.sha }}
 #
 # When the pinned core version (deploy/core-release.json) differs from the
 # core_version that arkhiv-api.subcult.tv reports, when deploy/core.Dockerfile
-# changed since the last successful run, or when a manual run asks for it, the
+# changed since the last successful core deploy, or when a manual run asks for it, the
 # core job deploys the pinned core through the arkhiv-core fleet-deploy receiver
 # profile. The job joins the tailnet as tag:github-ci (Tailscale OAuth client in
 # the TS_OAUTH_* organization secrets) and uses the production environment's
@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      # Reads this workflow's last successful run (gh run list).
+      # Reads this workflow's earlier runs and their core job results.
       actions: read
     outputs:
       core: ${{ steps.core.outputs.core }}
@@ -89,21 +89,30 @@ jobs:
           fi
           if [ "$EVENT" = workflow_dispatch ] && [ "$DISPATCH_CORE" = true ]; then core=true; fi
           # A wrapper change needs a new core image even when the version
-          # matches. Compare with the head of the last successful run of this
-          # workflow: a run refused because a newer commit reached main, or
-          # cancelled while queued, never succeeds, so its wrapper change
-          # carries forward to the next run. Without a usable earlier success,
-          # compare the pushed range, or the parent when that is unknown.
+          # matches. Compare with the head of the last run whose core job
+          # succeeded: a core run that was refused, cancelled, skipped because
+          # CORE_DEPLOY_ENABLED was off, or never started does not count, so
+          # its wrapper change carries forward. Without such a run among the
+          # last 50, compare the pushed range, or the parent when that is unknown.
           base=$(git rev-parse "$DEPLOY_REVISION^")
           if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
             && git merge-base --is-ancestor "$BEFORE" "$DEPLOY_REVISION"; then base=$BEFORE; fi
-          if last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy.yml --branch main \
-            --status success --limit 1 --json headSha --jq '.[0].headSha // ""') \
-            && [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null \
+          last=""
+          if runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs?branch=main&status=completed&per_page=50" \
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'); then
+            while read -r run sha; do
+              [ -n "$run" ] || continue
+              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest" \
+                --jq '.jobs[] | select(.name == "Deploy the pinned core image" and .conclusion == "success") | .id' | grep -q .; then
+                last=$sha; break
+              fi
+            done <<< "$runs"
+          fi
+          if [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null \
             && git merge-base --is-ancestor "$last" "$DEPLOY_REVISION"; then
             base=$last
           else
-            echo "::warning title=Last successful deploy unknown::Comparing deploy/core.Dockerfile with $base only."
+            echo "::warning title=Last core deploy unknown::Comparing deploy/core.Dockerfile with $base only."
           fi
           if ! git diff --quiet "$base" "$DEPLOY_REVISION" -- deploy/core.Dockerfile; then
             echo "deploy/core.Dockerfile changed since $base"; core=true
