@@ -84,7 +84,8 @@ failure message.
 
 The script turns `DATABASE_URL` or `DATABASE_URL_FILE` into libpq variables, so
 the connection string never appears on a command line. It accepts a
-`postgres://` URL or a keyword string (`host=... dbname=...`) and stops before
+`postgres://` URL or a keyword string (`host=... dbname=...`). Settings the
+string omits keep their inherited `PG*` values, as they do for `vhness`. It stops before
 any command when a setting has no libpq variable, such as a multi-host URL or a
 `pool_*` parameter. When the operator
 commands run in a container, pass a prefix such as `--vhness "docker compose

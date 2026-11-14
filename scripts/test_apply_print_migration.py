@@ -276,7 +276,12 @@ class ApplyPrintMigrationTests(unittest.TestCase):
                          'PGHOST': 'elsewhere', 'PGPORT': '6000'})
         self.assertEqual((env['PGHOST'], env['PGDATABASE'], env['PGUSER'], env['PGPASSWORD'], env['PGSSLMODE']),
                          ('/run/postgresql', 'restored', 'pilot', "it's secret", 'disable'))
-        self.assertNotIn('PGPORT', env)
+        self.assertEqual(env['PGPORT'], '6000')  # omitted from the DSN, so the inherited value applies, as for vhness
+        self.assertEqual(libpq_env({'DATABASE_URL': r'user=a password=secret\ word\\x'})['PGPASSWORD'], 'secret word\\x')
+
+    def test_url_keeps_inherited_settings_it_omits(self):
+        env = libpq_env({'DATABASE_URL': 'postgres:///archive', 'PGHOST': 'db.internal', 'PGPORT': '6543'})
+        self.assertEqual((env['PGHOST'], env['PGPORT'], env['PGDATABASE']), ('db.internal', '6543', 'archive'))
 
     def test_unsupported_connection_settings_are_rejected(self):
         for url in ('postgres://a,b/db', 'host=db unknown_setting=1', 'not a dsn', 'postgres://db/x?pool_max_conns=4'):
