@@ -11,6 +11,14 @@ and histories remain in place. Apply migrations with the private operator
 identity before starting a public server with its own read-only database role.
 No HTTP endpoint can approve content.
 
+Set `ARKHIV_READER_ROLE` to that role's name (for example `arkhiv_reader`) when
+running `migrate`. After applying migrations, `migrate` grants the role USAGE on
+the migration schema (`public` in deployments) and SELECT on every table and
+view in it, including tables created in the same run, so a release that adds
+tables needs no manual `GRANT`. The role must already exist; an unknown or
+malformed name fails before any migration is applied. Without the setting,
+`migrate` changes no privileges.
+
 For native video entries, record the owner decision with:
 
 ```sh
