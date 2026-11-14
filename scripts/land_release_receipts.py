@@ -112,14 +112,22 @@ def viewer_tarball(version):
 
 
 def write_viewer(version, data):
+    """Write the receipt at the commit that set this package version."""
+    receipt = ROOT / 'docs/releases' / ('viewer-release-' + version + '.json')
+    revision = git('log', '-1', '--format=%H', '--', 'packages/viewer/package.json')
     work = Path(tempfile.mkdtemp())
     try:
         package = work / ('subcult-archive-viewer-' + version + '.tgz')
         package.write_bytes(data)
-        subprocess.run(['python3', 'scripts/viewer_receipt.py', '--package', str(package)], cwd=ROOT, check=True)
+        tree = work / 'tree'
+        git('worktree', 'add', '--quiet', '--detach', str(tree), revision)
+        try:
+            subprocess.run(['python3', 'scripts/viewer_receipt.py', '--package', str(package), '--output', str(receipt)], cwd=tree, check=True)
+        finally:
+            git('worktree', 'remove', '--force', str(tree))
     finally:
         shutil.rmtree(work)
-    return ROOT / 'docs/releases' / ('viewer-release-' + version + '.json')
+    return receipt
 
 
 def main():
@@ -127,7 +135,9 @@ def main():
     parser.add_argument('--wait-minutes', type=int, default=150)
     parser.add_argument('--poll-seconds', type=int, default=60)
     args = parser.parse_args()
-    head = git('rev-parse', 'HEAD')
+    # Start from the commit that set this core version, so a later manual run
+    # still finds the image built for the bump.
+    bump = git('log', '-1', '--format=%H', '--', 'docs/reference/core-version.json') or git('rev-parse', 'HEAD')
     core = json.loads((ROOT / 'docs/reference/core-version.json').read_text())['version']
     viewer = json.loads((ROOT / 'packages/viewer/package.json').read_text())['version']
     for value in (core, viewer):
@@ -138,7 +148,7 @@ def main():
     deadline = time.monotonic() + args.wait_minutes * 60
     while pending:
         if 'core' in pending:
-            found = core_revision(candidates(head), Registry().image, core)
+            found = core_revision(candidates(bump), Registry().image, core)
             if found:
                 print('Core', core, 'published from', found[0], 'as', found[1])
                 write_core(core, *found)
