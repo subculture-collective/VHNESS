@@ -134,3 +134,63 @@ exhausted default pools and keeps the generic `archive-core` DNS alias confined
 to its own instance. Use `ARKHIV_PUBLIC=1`, a nonempty collection scope and a
 read-only database role in `runtime/core.env` after migrating and recording
 explicit publication reviews with the separate operator identity.
+
+## Automatic core deploys
+
+On Almaz the platform core is the `archive-core` service in the shared
+`arkhiv-platform-public-20261004` Compose project, with database `arkhiv`. It
+serves the `anarchist-zines`, `bill-nye` and `democracy_now_vid` collections at
+`https://arkhiv-api.subcult.tv` and under `/api/` on `arkhiv.subcult.tv`; the
+product page at `arkhiv.subcult.tv/` is a separate service. This repository owns
+its pin. `bill-core` and `democracy-core` in the same project belong to
+bill-nye-tv and democracy-now-tv, which deploy them the same way.
+
+`.github/workflows/deploy.yml` runs the `core` job when the version in
+`deploy/core-release.json` differs from the `core_version` that
+`https://arkhiv-api.subcult.tv/api/version` reports, when
+`deploy/core.Dockerfile` changed since the head of the last successful run of
+the workflow (a refused or cancelled run never counts, so its change carries
+forward), or when a manual run sets `deploy_core`. It stays off until the
+repository variable `CORE_DEPLOY_ENABLED` is `true`. The job:
+
+1. pulls the pinned digest from `git.subcult.tv` (anonymous) and refuses an
+   image whose digest differs from the pin, or whose version and revision labels
+   differ from `deploy/core-release.json`;
+2. builds `deploy/core.Dockerfile` from that digest with an empty build context.
+   The wrapper adds only labels: source, revision (this repository's commit),
+   `org.opencontainers.image.version` (the core version) and
+   `org.subcult.archive-core.revision` (the core's own commit). CI refuses it if
+   its layers differ from the pin's, and `scripts/check_core_pin.py` (part of
+   `make verify`) refuses a Dockerfile with anything other than `ARG`,
+   `FROM ${CORE_IMAGE}` and `LABEL`;
+3. sends the image as service `archive-core` through the `arkhiv-core`
+   fleet-deploy receiver profile, using the `production` environment secrets
+   `HOMELAB_CORE_DEPLOY_KEY` and `HOMELAB_KNOWN_HOSTS`, unless the receiver
+   already holds it, then runs `deploy REVISION`. On Almaz the receiver backs up
+   `arkhiv`, runs `operator migrate` with the new image, swaps `archive-core`,
+   runs the checks and restores the previous image if they fail;
+4. fails with an annotation when the receiver refuses or rolls back, and
+   otherwise checks that `/api/version` reports the pinned `core_version`.
+
+Host registration (operator work, tracked on #61):
+
+- Profile `arkhiv-core` names service `archive-core` and a service-only
+  `compose_file` derived with `--no-env-resolution`: `archive-core` with its
+  live settings (the five non-secret values of `runtime/core.env` inlined), an
+  `operator` service for `migrate` using the existing `arkhiv` owner connection
+  file and `ARKHIV_READER_ROLE=arkhiv_reader`, and the existing external
+  `archive` network. No other service of the shared project is in that file. A
+  `runtime_guards` digest refuses drift.
+- `pre_deploy_command` dumps only `arkhiv` (under a minute; the receiver allows
+  120 seconds), checks the dump with `pg_restore -l` and keeps the five newest.
+- Checks on `arkhiv-api.subcult.tv`: `/api/ready`, one catalog listing per
+  collection, and `/api/version` with `json_labels: {"core_version":
+  "org.opencontainers.image.version"}`. Register the last check only after the
+  core reports `core_version` (0.4.11 or later): rollback verification runs it
+  against the previous image too.
+
+The shared project's `.env` keeps `ARCHIVE_ENGINE_IMAGE` at the bootstrap pin.
+Running `up -d` for the whole project by hand would put `archive-core` back on
+it; update it first, or recreate only other services. The manual Gitea
+`deploy-public` workflow (`docs/runbooks/public-deploy.md`) also deploys this
+service from the same pin.

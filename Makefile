@@ -9,6 +9,7 @@ verify: verify-core
 	pnpm build:packages
 	pnpm check:packages
 	python3 scripts/check_package_consumer.py
+	python3 scripts/check_core_pin.py
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	pnpm --dir web typecheck
 	pnpm --dir web lint

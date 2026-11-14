@@ -44,6 +44,9 @@ frontends. Production rollout, owner audiovisual review, and natural operation
 are separate evidence. See [development instructions](DEVELOPMENT.md),
 [deployment operations](docs/DEPLOYMENT.md), and the [roadmap](ROADMAP.md).
 
+On Almaz, merging a change to the core pin deploys the platform core
+automatically; see [automatic core deploys](docs/reference/headless-core.md#automatic-core-deploys).
+
 The public product page at <https://arkhiv.subcult.tv/> is static and lives in
 `site/`; it has its own [main CI deployment procedure](docs/runbooks/seo-ci-deployment.md).
 
