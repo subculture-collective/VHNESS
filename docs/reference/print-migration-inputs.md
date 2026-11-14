@@ -70,8 +70,10 @@ Before each step, the script reads the database with `psql` and skips the step
 when the database already holds that exact input. Rerunning a completed plan
 therefore changes nothing, and rerunning after a failure resumes at the failed
 step. A step whose current state differs from the input stops the run instead of
-overwriting it, for example a transport review changed after migration or a
-collection with other limits. After each command, the script checks that the
+overwriting it, for example a catalog item or transport review changed after
+migration, or a collection with other limits. Catalog items compare their
+fields, editorial record, listed memberships and representations, not only
+their IDs. After each command, the script checks that the
 database now holds the input.
 
 The first failure stops the run with the step number, command and target. Each
@@ -81,7 +83,10 @@ outcome (`applied`, `unchanged`, `ran` for `migrate`, or `failed`), and the
 failure message.
 
 The script turns `DATABASE_URL` or `DATABASE_URL_FILE` into libpq variables, so
-the connection string never appears on a command line. When the operator
+the connection string never appears on a command line. It accepts a
+`postgres://` URL or a keyword string (`host=... dbname=...`) and stops before
+any command when a setting has no libpq variable, such as a multi-host URL or a
+`pool_*` parameter. When the operator
 commands run in a container, pass a prefix such as `--vhness "docker compose
 exec -T api vhness"` and an equivalent `--psql`; input paths must then resolve
 the same inside the container. `review-transport --approve-public` is still the

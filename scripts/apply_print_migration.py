@@ -71,9 +71,8 @@ def plan_steps(directory, notes, budget=None, reserve=None):
         item = json.loads(raw)
         if path.name != 'item-' + sha(item['id']) + '.json':
             raise ApplyError('Item input name differs from its identity: ' + path.name)
-        ids = sorted(rep['id'] for rep in item['representations'])
-        representations += len(ids)
-        steps.append({'command': 'import-catalog', 'item': item['id'], 'representations': ids, 'file': path,
+        representations += len(item['representations'])
+        steps.append({'command': 'import-catalog', 'item': item['id'], 'input': item, 'file': path,
                       'sha256': digest(raw), 'args': ['--file', str(path), '--notes', notes]})
     if len(items) != plan['documents'] or representations != plan['variants']:
         raise ApplyError('Item inputs differ from the plan document and variant counts')
@@ -89,6 +88,39 @@ def plan_steps(directory, notes, budget=None, reserve=None):
                           'collection': entry['collection'], 'file': path, 'sha256': digest(raw), 'input': data,
                           'args': args})
     return plan_file, steps
+
+
+def expected_catalog(item):
+    """The catalog fields InsertCatalog stores, in the shape PsqlState.catalog_item reads them."""
+    return {'title': item['title'], 'description': item.get('description', ''), 'date': item.get('date', ''),
+            'creator': item.get('creator', ''), 'editorial': item.get('editorial') or {},
+            'collections': sorted(item['collections']),
+            'representations': sorted(({'id': r['id'], 'media': r['media'], 'source_item_id': r['source_item_id'],
+                                        'snapshot_sha256': r['snapshot_sha256'], 'file': r['file'],
+                                        'collections': sorted(r['collections']), 'extension': r['extension']}
+                                       for r in item['representations']), key=lambda r: r['id'])}
+
+
+def holds(stored, expected):
+    """True when stored JSON holds expected. Stored extra keys and omitted empty values are allowed."""
+    if isinstance(expected, dict):
+        return isinstance(stored, dict) and all(
+            holds(stored[key], value) if key in stored else not value for key, value in expected.items())
+    if isinstance(expected, list):
+        return isinstance(stored, list) and len(stored) == len(expected) and all(map(holds, stored, expected))
+    return stored == expected
+
+
+def catalog_matches(found, item):
+    expected = expected_catalog(item)
+    reps = expected.pop('representations')
+    if {k: found.get(k) for k in expected} != expected or len(found['representations']) != len(reps):
+        return False
+    for stored, rep in zip(found['representations'], reps):
+        extension = rep.pop('extension')
+        if {k: stored.get(k) for k in rep} != rep or not holds(stored['extension'], extension):
+            return False
+    return True
 
 
 def expected_index(data):
@@ -120,7 +152,7 @@ def current_state(state, step):
         found = state.catalog_item(step['item'])
         if found is None:
             return 'missing'
-        return 'present' if found == step['representations'] else 'catalog item exists with other representations'
+        return 'present' if catalog_matches(found, step['input']) else 'catalog item differs from the prepared item; review it explicitly'
     if command == 'review-transport':
         found = state.transport_review(step['item'], step['representation'], step['collection'])
         if found is None:
@@ -219,7 +251,12 @@ class PsqlState:
         return self.query("SELECT to_json(item_id) FROM snapshots WHERE sha256=:'s';", s=sha256)
 
     def catalog_item(self, item):
-        return self.query("SELECT COALESCE(json_agg(r.id ORDER BY r.id) FILTER (WHERE r.id IS NOT NULL),'[]') FROM catalog_items i LEFT JOIN catalog_representations r ON r.item_id=i.id WHERE i.id=:'i' GROUP BY i.id;", i=item)
+        return self.query("""SELECT json_build_object('title',i.title,'description',i.description,'date',i.date,'creator',i.creator,'editorial',i.editorial,
+ 'collections',(SELECT COALESCE(json_agg(m.collection_id ORDER BY m.collection_id),'[]') FROM catalog_memberships m WHERE m.item_id=i.id AND m.listed),
+ 'representations',(SELECT COALESCE(json_agg(json_build_object('id',r.id,'media',r.media,'source_item_id',r.source_item_id,'snapshot_sha256',r.source_hash,'file',r.file,'extension',r.extension,
+   'collections',(SELECT COALESCE(json_agg(rm.collection_id ORDER BY rm.collection_id),'[]') FROM catalog_representation_memberships rm WHERE rm.item_id=r.item_id AND rm.representation_id=r.id AND rm.listed)) ORDER BY r.id),'[]')
+  FROM catalog_representations r WHERE r.item_id=i.id))
+FROM catalog_items i WHERE i.id=:'i';""", i=item)
 
     def transport_review(self, item, representation, collection):
         return self.query("SELECT json_build_object('review',review,'preservation',preservation) FROM representation_transport_reviews WHERE item_id=:'i' AND representation_id=:'r' AND collection_id=:'c';", i=item, r=representation, c=collection)
@@ -229,22 +266,54 @@ class PsqlState:
         return self.query("SELECT json_build_object(" + fields + ",'sections',(SELECT COALESCE(json_object_agg(t.page::text,t.text),'{}') FROM print_page_text t WHERE t.item_id=p.item_id AND t.representation_id=p.representation_id AND t.file=p.file)) FROM print_indexes p WHERE p.item_id=:'i' AND p.representation_id=:'r';", i=item, r=representation)
 
 
+LIBPQ = {'host': 'PGHOST', 'hostaddr': 'PGHOSTADDR', 'port': 'PGPORT', 'dbname': 'PGDATABASE', 'user': 'PGUSER',
+         'password': 'PGPASSWORD', 'passfile': 'PGPASSFILE', 'sslmode': 'PGSSLMODE', 'sslrootcert': 'PGSSLROOTCERT',
+         'sslcert': 'PGSSLCERT', 'sslkey': 'PGSSLKEY', 'connect_timeout': 'PGCONNECT_TIMEOUT',
+         'application_name': 'PGAPPNAME', 'options': 'PGOPTIONS', 'target_session_attrs': 'PGTARGETSESSIONATTRS'}
+
+
+KEYWORD = re.compile(r"\s*([A-Za-z_]+)\s*=\s*('(?:[^'\\]|\\.)*'|[^\s']+)\s*")
+
+
+def keyword_settings(dsn):
+    """Parse a libpq keyword connection string: key=value pairs, values optionally single-quoted."""
+    settings, position = {}, 0
+    while position < len(dsn):
+        match = KEYWORD.match(dsn, position)
+        if not match:
+            raise ApplyError('Unsupported database connection string format')
+        value = match.group(2)
+        settings[match.group(1)] = re.sub(r'\\(.)', r'\1', value[1:-1]) if value.startswith("'") else value
+        position = match.end()
+    return settings
+
+
 def libpq_env(environ):
-    """Translate DATABASE_URL (or DATABASE_URL_FILE) into libpq variables, keeping it off the command line."""
+    """Translate DATABASE_URL (or DATABASE_URL_FILE) into libpq variables, keeping it off the command line.
+
+    Raises ApplyError for a setting psql cannot receive this way, before any command runs."""
     env = dict(environ)
     url = environ.get('DATABASE_URL', '')
     if environ.get('DATABASE_URL_FILE'):
         url = Path(environ['DATABASE_URL_FILE']).read_text().strip()
     if not url:
         return env
-    parts = urlsplit(url)
-    for name, value in (('PGHOST', parts.hostname), ('PGPORT', parts.port), ('PGUSER', parts.username),
-                        ('PGPASSWORD', parts.password), ('PGDATABASE', parts.path.lstrip('/'))):
-        if value:
-            env[name] = unquote(str(value))
-    for key, values in parse_qs(parts.query).items():
-        if key == 'sslmode':
-            env['PGSSLMODE'] = values[-1]
+    if url.startswith(('postgres://', 'postgresql://')):
+        parts = urlsplit(url)
+        if ',' in parts.netloc:
+            raise ApplyError('Multi-host database URLs are not supported')
+        settings = {'host': parts.hostname, 'port': parts.port, 'user': parts.username,
+                    'password': parts.password, 'dbname': parts.path.lstrip('/')}
+        settings = {k: unquote(str(v)) for k, v in settings.items() if v}
+        settings.update((k, v[-1]) for k, v in parse_qs(parts.query).items())
+    else:
+        settings = keyword_settings(url)
+    unknown = sorted(set(settings) - set(LIBPQ))
+    if unknown:
+        raise ApplyError('Unsupported database connection setting: ' + ', '.join(unknown))
+    for name in LIBPQ.values():
+        env.pop(name, None)
+    env.update((LIBPQ[k], v) for k, v in settings.items())
     return env
 
 
@@ -261,7 +330,10 @@ def main():
     if (args.budget is None) != (args.reserve is None):
         parser.error('--budget and --reserve go together')
     receipt = args.receipt or args.plan / ('apply-receipt-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '.json')
-    env = libpq_env(os.environ)
+    try:
+        env = libpq_env(os.environ)
+    except (ApplyError, OSError) as error:
+        raise SystemExit('Stopped before any command: ' + str(error))
     vhness = shlex.split(args.vhness)
     result = apply(args.plan, lambda argv: subprocess.run(vhness + argv).returncode,
                    PsqlState(shlex.split(args.psql), env), receipt, args.notes, args.budget, args.reserve)

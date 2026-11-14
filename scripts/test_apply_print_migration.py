@@ -10,7 +10,7 @@ import time
 import unittest
 import urllib.request
 
-from apply_print_migration import PsqlState, apply, libpq_env
+from apply_print_migration import ApplyError, PsqlState, apply, libpq_env
 from prepare_print_migration import prepare
 
 COLLECTION = 'fixture-zines'
@@ -99,7 +99,17 @@ class FakeDatabase:
             item = json.loads(data)
             if item['id'] in t['items']:
                 return 1  # duplicate primary key
-            t['items'][item['id']] = sorted(r['id'] for r in item['representations'])
+            reps = []
+            for r in sorted(item['representations'], key=lambda r: r['id']):
+                extension = copy.deepcopy(r['extension'])
+                if not extension['print'].get('companions'):
+                    extension['print'].pop('companions', None)  # omitempty, as the Go encoder stores it
+                reps.append({'id': r['id'], 'media': r['media'], 'source_item_id': r['source_item_id'],
+                             'snapshot_sha256': r['snapshot_sha256'], 'file': r['file'],
+                             'collections': sorted(r['collections']), 'extension': extension})
+            t['items'][item['id']] = {'title': item['title'], 'description': item['description'], 'date': item['date'],
+                                      'creator': item['creator'], 'editorial': item['editorial'],
+                                      'collections': sorted(item['collections']), 'representations': reps}
         elif command == 'review-transport':
             review = json.loads(data)
             if review['review']['public'] != flags.get('public', False):
@@ -159,7 +169,8 @@ class ApplyPrintMigrationTests(unittest.TestCase):
         self.assertEqual(self.commands(), ['migrate', 'collection', 'retain-legacy', 'import-source',
                                            'import-catalog', 'import-catalog', 'review-transport',
                                            'review-transport', 'restore-print-index'])
-        self.assertEqual(self.db.tables['items'], {DOCUMENT: sorted([READ, PRINT]), UNPUBLISHED: [DRAFT]})
+        self.assertEqual({k: [r['id'] for r in v['representations']] for k, v in self.db.tables['items'].items()},
+                         {DOCUMENT: sorted([READ, PRINT]), UNPUBLISHED: [DRAFT]})
         self.assertEqual(sorted(k[1] for k in self.db.tables['reviews']), sorted([READ, PRINT]))
         self.assertIn((DOCUMENT, READ), self.db.tables['indexes'])
         self.assertEqual(receipt['counts'], {'applied': 8, 'unchanged': 0, 'ran': 1, 'failed': 0})
@@ -200,6 +211,19 @@ class ApplyPrintMigrationTests(unittest.TestCase):
         self.assertIn('review it explicitly', receipt['failure'])
         self.assertNotIn('review-transport', self.commands())
         self.assertFalse(self.db.tables['reviews'][key]['review']['read'])
+
+    def test_changed_catalog_item_is_not_reported_unchanged(self):
+        self.apply()
+        path = self.inputs / ('item-' + UNPUBLISHED + '.json')
+        item = json.loads(path.read_text())
+        item['title'] = 'Changed title'
+        item['editorial']['legacy_document']['published'] = True
+        path.write_text(json.dumps(item))
+        self.db.calls.clear()
+        receipt = self.apply()
+        self.assertEqual(receipt['status'], 'failed')
+        self.assertIn('catalog item differs', receipt['failure'])
+        self.assertNotIn('import-catalog', self.commands())
 
     def test_missing_collection_needs_explicit_limits(self):
         receipt = self.apply(budget=None, reserve=None)
@@ -247,6 +271,18 @@ class ApplyPrintMigrationTests(unittest.TestCase):
         self.assertEqual((env['PGHOST'], env['PGPORT'], env['PGUSER'], env['PGPASSWORD'], env['PGDATABASE'], env['PGSSLMODE']),
                          ('db.internal', '5433', 'user', 'p@ss', 'arkhiv', 'disable'))
 
+    def test_keyword_connection_string_becomes_libpq_variables(self):
+        env = libpq_env({'DATABASE_URL': "host=/run/postgresql dbname=restored user=pilot password='it\\'s secret' sslmode=disable",
+                         'PGHOST': 'elsewhere', 'PGPORT': '6000'})
+        self.assertEqual((env['PGHOST'], env['PGDATABASE'], env['PGUSER'], env['PGPASSWORD'], env['PGSSLMODE']),
+                         ('/run/postgresql', 'restored', 'pilot', "it's secret", 'disable'))
+        self.assertNotIn('PGPORT', env)
+
+    def test_unsupported_connection_settings_are_rejected(self):
+        for url in ('postgres://a,b/db', 'host=db unknown_setting=1', 'not a dsn', 'postgres://db/x?pool_max_conns=4'):
+            with self.assertRaises(ApplyError):
+                libpq_env({'DATABASE_URL': url})
+
 
 @unittest.skipUnless(os.environ.get('ARKHIV_TEST_DATABASE_URL') and os.environ.get('VHNESS_BIN'),
                      'set ARKHIV_TEST_DATABASE_URL (an empty disposable database) and VHNESS_BIN')
@@ -279,8 +315,8 @@ class FixtureDatabaseTests(unittest.TestCase):
         self.assertEqual(second['status'], 'complete', second.get('failure'))
         self.assertEqual(second['counts']['applied'], 0)
         self.assertEqual(fingerprint(), before)
-        self.assertEqual(state.catalog_item(DOCUMENT), sorted([READ, PRINT]))
-        self.assertEqual(state.catalog_item(UNPUBLISHED), [DRAFT])
+        for item, variants in ((DOCUMENT, [READ, PRINT]), (UNPUBLISHED, [DRAFT])):
+            self.assertEqual([r['id'] for r in state.catalog_item(item)['representations']], sorted(variants))
 
         with socket.socket() as probe:
             probe.bind(('127.0.0.1', 0))
