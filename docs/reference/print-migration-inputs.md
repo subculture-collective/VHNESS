@@ -36,9 +36,64 @@ Keep the original database dump and fresh legacy restore as the authority for
 all prior decisions, acquisition events, text indexes and schema history. Common
 catalog import adds its own migration/transport history; it does not reinterpret
 legacy events as newly granted rights. Rebuild common derivatives separately and
-retain original derivatives. Explicitly import the source and catalog, review
-transport, then index print using the existing operator commands. Collection
-limits and deployment scope still require their retained configuration.
+retain original derivatives. Collection limits and deployment scope still
+require their retained configuration.
+
+## Applying the plan
+
+`scripts/apply_print_migration.py` applies a prepared directory with the
+`vhness` operator commands, in this order:
+
+1. `migrate`.
+2. `collection`, with `local_preserve` policy and the `--budget` and
+   `--reserve` you pass. Without them, the collection must already exist.
+3. `retain-legacy` for each `retained-export-*.json`. This stores the donor's
+   collection configuration, so the compatibility `/api/collections` returns
+   the collection name, introduction and accent.
+4. `import-source` for each `source-*.json`, after checking its bytes against
+   the plan.
+5. `import-catalog` for each `item-*.json`, keeping legacy document and
+   variant IDs.
+6. `review-transport` for each `review-*.json`, with `--approve-public` only
+   when the prepared review is public.
+7. `restore-print-index` for each `index-*.json`.
+
+```sh
+DATABASE_URL=... VHNESS_COLLECTION=zines \
+VHNESS_MEDIA=/private/independent-backup/archive \
+VHNESS_DERIVATIVES=/private/independent-backup/archive \
+python3 scripts/apply_print_migration.py \
+  --plan /private/new-platform-inputs --budget 1073741824 --reserve 1073741824
+```
+
+Before each step, the script reads the database with `psql` and skips the step
+when the database already holds that exact input. Rerunning a completed plan
+therefore changes nothing, and rerunning after a failure resumes at the failed
+step. A step whose current state differs from the input stops the run instead of
+overwriting it, for example a transport review changed after migration or a
+collection with other limits. After each command, the script checks that the
+database now holds the input.
+
+The first failure stops the run with the step number, command and target. Each
+run writes a new receipt (`apply-receipt-<UTC time>.json` in the plan directory,
+or `--receipt`) with the plan hash, each step's input file, input hash and
+outcome (`applied`, `unchanged`, `ran` for `migrate`, or `failed`), and the
+failure message.
+
+The script turns `DATABASE_URL` or `DATABASE_URL_FILE` into libpq variables, so
+the connection string never appears on a command line. When the operator
+commands run in a container, pass a prefix such as `--vhness "docker compose
+exec -T api vhness"` and an equivalent `--psql`; input paths must then resolve
+the same inside the container. `review-transport --approve-public` is still the
+only path to public access, and only for reviews prepared with
+`--retain-public-approvals`.
+
+`scripts/test_apply_print_migration.py` covers ordering, reruns and failures
+with a fake runner. With `ARKHIV_TEST_DATABASE_URL` (an empty, disposable
+database) and `VHNESS_BIN` set, it also applies a synthetic fixture collection
+twice through the real commands, checks that the second run leaves every table
+unchanged, and reads the collection and documents back from the compatibility
+API.
 
 Generated inputs are a preparation artifact. Qualify actual catalog coverage,
 PDF reading/search, original-download hashes, an independent common database
