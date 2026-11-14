@@ -116,6 +116,15 @@ class PublicCheckpointTests(unittest.TestCase):
                 prepare_checkpoint(*args)
             self.assertFalse(args[5].exists())
 
+    def test_malformed_schedule_program_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            args = self.fixture(Path(temp))
+            data = json.loads(self.export.read_text())
+            del data['station_schedule'][0]['schedule']['programs'][1]['recording_id']
+            self.write(data)
+            with self.assertRaisesRegex(ValueError, 'Invalid legacy station schedule'):
+                prepare_checkpoint(*args)
+
     def test_original_with_other_bytes_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
             args = self.fixture(Path(temp))

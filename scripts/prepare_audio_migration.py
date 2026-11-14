@@ -160,7 +160,8 @@ def legacy_schedule(rows, recordings, scheduled):
         raise ValueError('Invalid legacy station schedule')
     schedule = rows[0]['schedule']
     programs = schedule.get('programs')
-    if not schedule.get('revision') or not isinstance(programs, list):
+    if (not schedule.get('revision') or not isinstance(programs, list)
+            or not all(isinstance(program, dict) and isinstance(program.get('recording_id'), str) for program in programs)):
         raise ValueError('Invalid legacy station schedule')
     referenced = sorted({program.get('recording_id') for program in programs})
     if any(identity not in recordings for identity in referenced):
