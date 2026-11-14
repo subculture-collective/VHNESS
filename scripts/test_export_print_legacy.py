@@ -101,7 +101,9 @@ def legacy_fixture(root):
     tables.update({
         'assets': assets,
         'collections': [{'id': COLLECTION, 'config': {'name': 'Round Trip Zines', 'accent': '#245c42',
-                                                       'introduction': 'Synthetic exported print collection'},
+                                                       'introduction': 'Synthetic exported print collection',
+                                                       'limits': {'documents': 10, 'total_bytes': 1 << 20,
+                                                                  'file_bytes': 1 << 20, 'concurrency': 1}},
                          'updated_at': AT}],
         'documents': [{**document, 'id': PUBLISHED, 'source_key': 'read', 'published': True,
                        'metadata': {'title': 'Round trip zine', 'date': '1995-03-01'}},
