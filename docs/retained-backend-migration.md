@@ -11,7 +11,9 @@ identifiers remain stable. Effective metadata merges the retained source and edi
 overrides. Public responses expose the same metadata fields as the original print
 API. Rights text remains separate from access. Full-text browsing uses retained native
 page indexes; range reads and downloads verify the current original against its
-reviewed preservation manifest before serving bytes.
+reviewed preservation manifest before serving bytes. `/api/documents?series=` and the `series` list in
+`/api/facets` add accepted series labels to this contract without changing the
+existing fields ([catalog labels](reference/catalog-labels.md#series)).
 
 Audio routes retain `/api/recordings`, `/api/audio/{recording}`, `/api/station`,
 `/api/calendar`, `/api/dates/{date}`, `/api/on-this-day` and `/api/shows`. The adapter

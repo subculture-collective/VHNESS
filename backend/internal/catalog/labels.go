@@ -46,7 +46,8 @@ func (d *DB) ImportLabels(ctx context.Context, labels []domain.Label) error {
 
 // ProposeLabels records method proposals. Existing proposals are refreshed;
 // accepted and rejected assignments keep their reviewed state and are not
-// overwritten by a later run.
+// overwritten by a later run. A series proposal carries the item's issue
+// position and issue label, which the review accepts with it.
 func (d *DB) ProposeLabels(ctx context.Context, proposals []domain.LabelProposal, notes string) (int, error) {
 	if strings.TrimSpace(notes) == "" || len(proposals) > 200000 {
 		return 0, fmt.Errorf("label proposals require notes and at most 200000 entries")
@@ -57,33 +58,51 @@ func (d *DB) ProposeLabels(ctx context.Context, proposals []domain.LabelProposal
 	}
 	defer tx.Rollback(ctx)
 	changed := 0
+	kinds := map[string]string{}
 	for _, p := range proposals {
 		if err = p.Validate(); err != nil {
+			return 0, err
+		}
+		kind, known := kinds[p.Label]
+		if !known {
+			if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT kind FROM catalog_labels WHERE id=$1),'')`, p.Label).Scan(&kind); err != nil {
+				return 0, err
+			}
+			kinds[p.Label] = kind
+		}
+		if kind == "" {
+			return 0, fmt.Errorf("unknown label %q", p.Label)
+		}
+		if err = p.CheckKind(kind); err != nil {
 			return 0, err
 		}
 		evidence := p.Evidence
 		if len(evidence) == 0 {
 			evidence = json.RawMessage(`{}`)
 		}
-		tag, err := tx.Exec(ctx, `INSERT INTO catalog_label_assignments(item_id,label_id,state,method,score,evidence)
- SELECT $1,$2,'proposed',$3,$4,$5 WHERE EXISTS(SELECT 1 FROM catalog_items WHERE id=$1) AND EXISTS(SELECT 1 FROM catalog_labels WHERE id=$2)
- ON CONFLICT(item_id,label_id) DO UPDATE SET method=excluded.method,score=excluded.score,evidence=excluded.evidence,updated_at=now()
- WHERE catalog_label_assignments.state='proposed'`, p.Item, p.Label, p.Method, p.Score, evidence)
+		var issueLabel *string
+		if p.IssuePosition != nil {
+			issueLabel = &p.IssueLabel
+		}
+		tag, err := tx.Exec(ctx, `INSERT INTO catalog_label_assignments(item_id,label_id,state,method,score,evidence,issue_position,issue_label)
+ SELECT $1,$2,'proposed',$3,$4,$5,$6,$7 WHERE EXISTS(SELECT 1 FROM catalog_items WHERE id=$1)
+ ON CONFLICT(item_id,label_id) DO UPDATE SET method=excluded.method,score=excluded.score,evidence=excluded.evidence,issue_position=excluded.issue_position,issue_label=excluded.issue_label,updated_at=now()
+ WHERE catalog_label_assignments.state='proposed'`, p.Item, p.Label, p.Method, p.Score, evidence, p.IssuePosition, issueLabel)
 		if err != nil {
 			return 0, err
 		}
 		if tag.RowsAffected() == 0 {
 			var exists bool
-			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM catalog_items WHERE id=$1) AND EXISTS(SELECT 1 FROM catalog_labels WHERE id=$2)`, p.Item, p.Label).Scan(&exists); err != nil {
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM catalog_items WHERE id=$1)`, p.Item).Scan(&exists); err != nil {
 				return 0, err
 			}
 			if !exists {
-				return 0, fmt.Errorf("unknown item %q or label %q", p.Item, p.Label)
+				return 0, fmt.Errorf("unknown item %q", p.Item)
 			}
 			continue // already reviewed
 		}
 		changed++
-		if _, err = tx.Exec(ctx, `INSERT INTO catalog_label_history(item_id,label_id,state,method,score,evidence,notes) VALUES($1,$2,'proposed',$3,$4,$5,$6)`, p.Item, p.Label, p.Method, p.Score, evidence, notes); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO catalog_label_history(item_id,label_id,state,method,score,evidence,notes,issue_position,issue_label) VALUES($1,$2,'proposed',$3,$4,$5,$6,$7,$8)`, p.Item, p.Label, p.Method, p.Score, evidence, notes, p.IssuePosition, issueLabel); err != nil {
 			return 0, err
 		}
 	}
@@ -107,11 +126,13 @@ func (d *DB) ReviewLabels(ctx context.Context, decisions []domain.LabelDecision,
 		var method string
 		var score float64
 		var evidence []byte
-		err = tx.QueryRow(ctx, `UPDATE catalog_label_assignments SET state=$3,notes=$4,updated_at=now() WHERE item_id=$1 AND label_id=$2 RETURNING method,score,evidence`, decision.Item, decision.Label, decision.State, notes).Scan(&method, &score, &evidence)
+		var position *int
+		var issueLabel *string
+		err = tx.QueryRow(ctx, `UPDATE catalog_label_assignments SET state=$3,notes=$4,updated_at=now() WHERE item_id=$1 AND label_id=$2 RETURNING method,score,evidence,issue_position,issue_label`, decision.Item, decision.Label, decision.State, notes).Scan(&method, &score, &evidence, &position, &issueLabel)
 		if err != nil {
 			return 0, fmt.Errorf("no assignment of %q to %q: %w", decision.Label, decision.Item, err)
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO catalog_label_history(item_id,label_id,state,method,score,evidence,notes) VALUES($1,$2,$3,$4,$5,$6,$7)`, decision.Item, decision.Label, decision.State, method, score, evidence, notes); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO catalog_label_history(item_id,label_id,state,method,score,evidence,notes,issue_position,issue_label) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, decision.Item, decision.Label, decision.State, method, score, evidence, notes, position, issueLabel); err != nil {
 			return 0, err
 		}
 	}

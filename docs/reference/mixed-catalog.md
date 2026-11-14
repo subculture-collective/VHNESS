@@ -16,7 +16,9 @@ reports `["metadata","text"]` and each item carries up to three `text_hits`
 (`representation`, `page`, `snippet`). Only text indexed for the representation's
 current snapshot matches, so withdrawn or stale editions do not leak through
 search. `label` limits results to items with that accepted label; items list
-their accepted `labels`. Caption and transcript search are not advertised.
+their accepted `labels`. A `series` label returns its items in issue order, and
+its entry in `labels` carries `issue_position` and `issue_label`
+([catalog labels](catalog-labels.md#series)). Caption and transcript search are not advertised.
 `GET /api/catalog/v1/items/{id}` uses the same collection and representation
 visibility checks. A foreign collection returns 404 under the existing server
 collection scope. An item exposes only representations and membership visible
