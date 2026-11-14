@@ -1,0 +1,99 @@
+name: Consumer upgrades
+run-name: Consumer upgrades ${{ inputs.kind || 'receipts' }} ${{ inputs.version || github.sha }}
+# Proposes each new core or viewer release to the registered consumer repositories
+# as a pull request in each of them; a consumer merges it once its own required
+# checks pass. Release receipts dispatches this after a receipt lands, because a
+# merge made with the Actions token starts no push workflow; a receipt merged by a
+# person starts it through the push trigger. Consumer checks run here without a
+# database; each consumer's own CI runs its full suite before the merge.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/releases/*.json
+      - docs/reference/consumer-registry.json
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Release lane with a committed receipt
+        required: true
+        default: viewer
+        type: choice
+        options: [viewer, core]
+      version:
+        description: Release version with a committed receipt
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: consumer-upgrades
+  cancel-in-progress: false
+jobs:
+  propose:
+    name: Propose consumer upgrades
+    if: github.repository == 'subculture-collective/arkhiv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Select the receipts to propose
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          INPUT_KIND: ${{ inputs.kind }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            echo "releases=$INPUT_KIND=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          releases=""
+          for file in $(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- docs/releases docs/reference/consumer-registry.json | sort -u); do
+            case "$file" in
+              docs/releases/viewer-release-*.json) releases="$releases viewer=${file#docs/releases/viewer-release-}" ;;
+              docs/releases/core-release-*.json) releases="$releases core=${file#docs/releases/core-release-}" ;;
+              docs/reference/consumer-registry.json)
+                releases="$releases viewer=$(node -p "require('./packages/viewer/package.json').version") core=$(python3 -c 'import json; print(json.load(open("docs/reference/core-version.json"))["version"])')" ;;
+            esac
+          done
+          releases=$(for entry in $releases; do echo "${entry%.json}"; done | sort -u | tr '\n' ' ')
+          echo "releases=$releases" >> "$GITHUB_OUTPUT"
+          echo "Proposing: ${releases:-nothing}"
+      - uses: actions/setup-go@v5
+        if: steps.select.outputs.releases != ''
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        if: steps.select.outputs.releases != ''
+        with:
+          node-version: '24'
+      - name: Install consumer verification tools
+        if: steps.select.outputs.releases != ''
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends poppler-utils util-linux ffmpeg rsync
+      - name: Propose compatible consumer upgrades
+        if: steps.select.outputs.releases != ''
+        env:
+          ARCHIVE_RELEASES: ${{ steps.select.outputs.releases }}
+          ARCHIVE_UPGRADE_TOKEN: ${{ secrets.ARCHIVE_CONSUMER_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$ARCHIVE_UPGRADE_TOKEN"
+          tool_dir=$(mktemp -d)
+          trap 'rm -rf "$tool_dir"' EXIT
+          npm install --prefix "$tool_dir" pnpm@10.33.0
+          export PATH="$tool_dir/node_modules/.bin:$PATH"
+          for entry in $ARCHIVE_RELEASES; do
+            kind="${entry%%=*}"
+            version="${entry#*=}"
+            case "$kind" in viewer|core) ;; *) echo "Unknown release kind $kind" >&2; exit 1 ;; esac
+            echo "::group::Propose $kind $version"
+            python3 scripts/propose_release_upgrades.py --kind "$kind" --version "$version" --auto-merge
+            echo "::endgroup::"
+          done

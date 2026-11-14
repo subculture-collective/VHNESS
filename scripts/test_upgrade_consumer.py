@@ -132,7 +132,7 @@ class UpgradeTests(unittest.TestCase):
                          'state': 'open', 'html_url': 'https://git.subcult.tv/example/pulls/1'}]
             if '/contents/' in path:
                 return {'content': base64.b64encode(json.dumps(self.release).encode()).decode()}
-            return {'default_branch': 'main'}
+            return {'default_branch': 'main', 'permissions': {'push': True}}
         for _ in range(2):
             self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact, request),
                              'https://git.subcult.tv/example/pulls/1')
@@ -158,7 +158,7 @@ class UpgradeTests(unittest.TestCase):
                 if '/contents/' in path:
                     value = self.current if outcome == 'different-receipt' else self.release
                     return {'content': base64.b64encode(json.dumps(value).encode()).decode()}
-                return {'default_branch': 'main'}
+                return {'default_branch': 'main', 'permissions': {'push': True}}
             with self.subTest(outcome=outcome), mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run'):
                 if outcome == 'matching':
                     self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact, request),
@@ -172,7 +172,7 @@ class UpgradeTests(unittest.TestCase):
         self.consumer['repository'] = 'subculture-collective/example'
         def request(path, method='GET', payload=None):
             self.assertEqual(method, 'GET')
-            return {'login': 'subcult-agent'} if path == '/user' else {'default_branch': 'main'}
+            return {'login': 'subcult-agent'} if path == '/user' else {'default_branch': 'main', 'permissions': {'push': True}}
         with self.assertRaisesRegex(ValueError, 'configuration'):
             proposal({**self.release, 'configuration_version': 2}, self.consumer, self.root, self.artifact, request)
 
@@ -188,38 +188,46 @@ class UpgradeTests(unittest.TestCase):
                          'state': 'open', 'html_url': 'https://git.subcult.tv/example/pulls/2'}]
             if '/contents/' in path:
                 return {'content': base64.b64encode(json.dumps(self.release).encode()).decode()}
-            return {'default_branch': 'main'}
+            return {'default_branch': 'main', 'permissions': {'push': True}}
         self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact,
                                   request, base_ref='feat/adoption'), 'https://git.subcult.tv/example/pulls/2')
         with self.assertRaisesRegex(ValueError, 'different base'):
             proposal(self.release, self.consumer, self.root, self.artifact, request)
 
 
-    def test_auto_merge_schedules_the_merge_for_new_and_existing_proposals(self):
-        import urllib.error
+    def test_auto_merge_leaves_merging_to_the_consumer_repository(self):
+        # Consumer repositories merge ready pull requests once their checks pass;
+        # the proposal only reports the pull request and requests no merge.
         self.consumer['repository'] = 'subculture-collective/example'
         branch = 'archive-upgrade/v0.1.1-' + 'b' * 40
-        for existing, answer in [(False, None), (True, None), (True, 405)]:
+        for existing in (False, True):
             calls = []
             def request(path, method='GET', payload=None):
                 calls.append((path, method, payload))
-                if path == '/user':
-                    return {'login': 'subcult-agent'}
-                if method == 'POST' and path.endswith('/merge'):
-                    if answer:
-                        raise urllib.error.HTTPError(path, answer, 'not mergeable', {}, None)
-                    return None
                 if method == 'POST':
-                    return {'html_url': 'https://git.subcult.tv/example/pulls/7'}
+                    return {'html_url': 'https://github.com/subculture-collective/example/pull/7'}
                 if '/pulls?' in path:
-                    return [{'head': {'ref': branch}, 'base': {'ref': 'main'}, 'state': 'open', 'html_url': 'https://git.subcult.tv/example/pulls/7'}] if existing else []
+                    return [{'head': {'ref': branch}, 'base': {'ref': 'main'}, 'state': 'open', 'html_url': 'https://github.com/subculture-collective/example/pull/7'}] if existing else []
                 if '/contents/' in path:
                     return {'content': base64.b64encode(json.dumps(self.release).encode()).decode()}
-                return {'default_branch': 'main'}
-            with self.subTest(existing=existing, answer=answer), mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run'):
-                self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact, request, auto_merge=True), 'https://git.subcult.tv/example/pulls/7')
-            merges = [(path, payload) for path, method, payload in calls if method == 'POST' and path.endswith('/merge')]
-            self.assertEqual(merges, [('/repos/subculture-collective/example/pulls/7/merge', {'do': 'merge', 'merge_when_checks_succeed': True, 'delete_branch_after_merge': True})])
+                return {'default_branch': 'main', 'permissions': {'push': True}}
+            with self.subTest(existing=existing), mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run'):
+                self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact, request, auto_merge=True), 'https://github.com/subculture-collective/example/pull/7')
+            self.assertFalse(any(path.endswith('/merge') for path, _, _ in calls))
+            self.assertEqual(sum(method == 'POST' for _, method, _ in calls), 0 if existing else 1)
+
+    def test_proposal_requires_push_access_to_the_consumer(self):
+        self.consumer['repository'] = 'subculture-collective/example'
+        def request(path, method='GET', payload=None):
+            self.assertEqual(method, 'GET')
+            return {'default_branch': 'main', 'permissions': {'push': False}}
+        with self.assertRaisesRegex(ValueError, 'cannot push'):
+            proposal(self.release, self.consumer, self.root, self.artifact, request)
+
+    def test_registry_github_name_overrides_an_older_gitea_path(self):
+        from propose_consumer_upgrade import github_repository
+        self.assertEqual(github_repository({'repository': 'PatrickFanella/arkhiv-live-music', 'github_repository': 'subculture-collective/lineage'}), 'subculture-collective/lineage')
+        self.assertEqual(github_repository({'repository': 'subculture-collective/dedhed'}), 'subculture-collective/dedhed')
 
     def test_without_auto_merge_no_merge_is_requested(self):
         self.consumer['repository'] = 'subculture-collective/example'
@@ -232,7 +240,7 @@ class UpgradeTests(unittest.TestCase):
                 return {'html_url': 'https://git.subcult.tv/example/pulls/8'}
             if '/pulls?' in path:
                 return []
-            return {'default_branch': 'main'}
+            return {'default_branch': 'main', 'permissions': {'push': True}}
         with mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run'):
             proposal(self.release, self.consumer, self.root, self.artifact, request)
         self.assertFalse(any(path.endswith('/merge') for path, _ in calls))

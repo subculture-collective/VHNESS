@@ -88,7 +88,7 @@ class CoreReleaseTests(unittest.TestCase):
             if method == 'POST':
                 posts.append(payload)
                 return {'html_url': 'https://git.subcult.tv/http-client/pulls/1'}
-            return [] if '/pulls?' in path else {'default_branch': 'main'}
+            return [] if '/pulls?' in path else {'default_branch': 'main', 'permissions': {'push': True}}
         with mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run') as run:
             result = proposal(self.release, self.consumer, self.root, None, request)
         self.assertEqual(result, 'https://git.subcult.tv/http-client/pulls/1')
