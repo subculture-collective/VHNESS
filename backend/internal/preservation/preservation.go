@@ -130,32 +130,46 @@ func Hash(r io.Reader) (string, string, int64, error) {
 	return s, m, n, err
 }
 func Verify(root, path, hash string, bytes int64) (*os.File, error) {
-	jail, err := os.OpenRoot(root)
+	f, _, err := openLocal(root, path, bytes)
 	if err != nil {
 		return nil, err
 	}
-	defer jail.Close()
-	f, err := jail.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() != bytes {
-		f.Close()
-		return nil, fmt.Errorf("local original size/type mismatch")
-	}
-	actual, _, _, err := Hash(f)
-	if err != nil || actual != hash {
-		f.Close()
-		return nil, fmt.Errorf("local original integrity mismatch")
-	}
-	_, err = f.Seek(0, io.SeekStart)
-	if err != nil {
+	if err = checkHash(f, hash); err != nil {
 		f.Close()
 		return nil, err
 	}
 	return f, nil
 }
+
+// openLocal opens a regular file inside root and checks its expected size.
+func openLocal(root, path string, bytes int64) (*os.File, os.FileInfo, error) {
+	jail, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer jail.Close()
+	f, err := jail.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != bytes {
+		f.Close()
+		return nil, nil, fmt.Errorf("local original size/type mismatch")
+	}
+	return f, info, nil
+}
+
+// checkHash reads the whole file and leaves it at offset zero when it matches.
+func checkHash(f *os.File, hash string) error {
+	actual, _, _, err := Hash(f)
+	if err != nil || actual != hash {
+		return fmt.Errorf("local original integrity mismatch")
+	}
+	_, err = f.Seek(0, io.SeekStart)
+	return err
+}
+
 func (a *Acquirer) Acquire(ctx context.Context, c domain.Collection, e domain.Entry, m Manifest) (Receipt, error) {
 	var receipt Receipt
 	if a.Fixture && (!e.Episode.Synthetic || c.ID != "vhness-local-fixture" || m.Bytes > 10<<20) {

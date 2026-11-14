@@ -51,7 +51,7 @@ func (s *Server) audioResolve(w http.ResponseWriter, r *http.Request) {
 		write(w, 404, map[string]string{"error": "audio unavailable"})
 		return
 	}
-	f, err := audiomodule.Verify(s.Media, s.Derivatives, e, a, domain.PlayAction)
+	f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, e, a, domain.PlayAction)
 	if err != nil {
 		write(w, 404, map[string]string{"error": "audio unavailable"})
 		return
@@ -70,7 +70,7 @@ func (s *Server) audioMedia(w http.ResponseWriter, r *http.Request) {
 		write(w, 404, map[string]string{"error": "audio unavailable"})
 		return
 	}
-	f, err := audiomodule.Verify(s.Media, s.Derivatives, e, a, domain.PlayAction)
+	f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, e, a, domain.PlayAction)
 	if err != nil {
 		write(w, 404, map[string]string{"error": "audio unavailable"})
 		return
@@ -124,7 +124,7 @@ func (s *Server) audioChannel(w http.ResponseWriter, r *http.Request) {
 		unavailable("station has no current program")
 		return
 	}
-	f, err := audiomodule.Verify(s.Media, s.Derivatives, entry, asset, domain.ScheduleAction)
+	f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, entry, asset, domain.ScheduleAction)
 	if err != nil {
 		unavailable("current recording failed integrity check")
 		return

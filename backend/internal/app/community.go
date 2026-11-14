@@ -47,7 +47,7 @@ func (s *Server) communityCurrentMedia(ctx context.Context, collection, media st
 		}
 		offset := now.Sub(program.Start).Seconds()
 		if offset >= 0 && offset < program.Duration {
-			file, err := audiomodule.Verify(s.Media, s.Derivatives, entry, asset, domain.ScheduleAction)
+			file, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, entry, asset, domain.ScheduleAction)
 			if err != nil {
 				return nil, nil
 			}

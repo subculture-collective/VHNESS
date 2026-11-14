@@ -38,10 +38,24 @@ Corrupt or revoked inputs cannot expose their continuous derivative, including
 Range and conditional responses. Filesystem paths are absent from viewer JSON.
 No generic download or public relay permission follows from playback.
 
+The server hashes each original track and continuous derivative once, then
+trusts it while its device, inode, size, modification time and change time stay
+the same. Playback, Range reads and station polls, native and compatibility
+routes alike, open the file and compare that identity instead of rereading it.
+A file whose identity changed is hashed again before it is served, so changed
+bytes are still refused, even when the modification time was put back. A file
+changed within the last second is hashed on every request until it is quiet,
+because kernel timestamps are too coarse to tell two quick writes apart. Each
+file is rehashed at least every 24 hours to catch corruption that leaves its
+metadata alone, and the state is per process, so a restart hashes again.
+Concurrent requests for a file that is not yet verified wait for one read.
+Rights and review checks still run on every request. `register-audio` and
+`renew-public-audio` still hash every file in full.
+
 `schedule-audio` appends a collection-specific immutable station revision. Every
 program, including future programs, requires independent scheduling and playback
 reviews. The station endpoint checks all current policy bindings before returning
-its current program, and verifies the current program's bytes. Exhausted schedules
+its current program, and verifies the current program's bytes as described above. Exhausted schedules
 and withdrawn future eligibility return an unavailable state. Existing video
 schedules keep their original schema and identity.
 
