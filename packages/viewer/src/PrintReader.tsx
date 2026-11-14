@@ -248,7 +248,9 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     }
   }
   const result = searchResult?.query === query ? searchResult : null;
-  // Swipe left or right on a touch screen to turn the page, when the whole page is in view.
+  // Swipe left or right on a touch screen to turn the page, when the whole page is in view. The page box
+  // keeps vertical scrolling and pinch zoom but leaves sideways gestures to the reader, so the browser does
+  // not take a swipe as a pan and cancel the pointer.
   const swipeable = pageArrows && effectiveZoom === 'page';
   function swipeStart(event: PointerEvent) {
     if (swipeable && event.pointerType !== 'mouse') swipe.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
@@ -300,7 +302,7 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     {error && <p role="alert">{error}</p>}
     <div className="reader-page" ref={row}>
       {pageArrows && previous}
-      <div className="canvas-wrap" ref={wrapper} onPointerDown={swipeStart} onPointerUp={swipeEnd} onPointerCancel={() => { swipe.current = null; }}><canvas ref={canvas} aria-label={`${title}, PDF page ${page}`} data-testid="pdf-canvas" /></div>
+      <div className="canvas-wrap" ref={wrapper} style={swipeable ? { touchAction: 'pan-y pinch-zoom' } : undefined} onPointerDown={swipeStart} onPointerUp={swipeEnd} onPointerCancel={() => { swipe.current = null; }}><canvas ref={canvas} aria-label={`${title}, PDF page ${page}`} data-testid="pdf-canvas" /></div>
       {pageArrows && next}
     </div>
     {pageArrows && controls}

@@ -4,7 +4,9 @@
 
 - `pageArrows`: previous/next arrows beside the page, the toolbar after the page
   in the markup, ←/→ and Page Up/Down turn pages (←/→ pan a zoomed page that is
-  wider than its box), and a sideways swipe turns pages at the whole-page fit.
+  wider than its box), and a sideways swipe turns pages at the whole-page fit
+  (the page box sets `touch-action: pan-y pinch-zoom` so the browser leaves
+  sideways swipes to the reader).
 - `fitPage`: a "Whole page" zoom, selected first. The reader sets
   `--print-page-ratio` (height / width of the current page) and
   `--print-page-top` (the page box's distance from the top of the document) so

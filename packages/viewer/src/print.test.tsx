@@ -32,6 +32,7 @@ describe('shared print reader', () => {
     expect(markup).toContain('Full screen');
     expect(markup).toContain('title="Next page (→)"');
     expect(markup).toContain('<span class="reader-fullscreen-label">Full screen</span>');
+    expect(markup).toContain('class="canvas-wrap" style="touch-action:pan-y pinch-zoom"');
     // The toolbar follows the page so keyboard order matches a toolbar placed under it.
     expect(markup.indexOf('data-testid="pdf-canvas"')).toBeLessThan(markup.indexOf('class="reader-controls"'));
   });
