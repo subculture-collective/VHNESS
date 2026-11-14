@@ -8,9 +8,13 @@ export type CatalogRepresentation = {
   file: string; collections: string[]; legacy_episode_id?: string;
   extension: { print?: { document_id: string; variant: string; pages: number }; audio?: { recording_id: string; concert_id?: string; credits: Record<string,string>; recording?:Recording }; video?: { episode_id: string } };
 };
-export type CatalogLabelKind = 'topic' | 'place' | 'organization' | 'person' | 'event';
-/** An accepted label; proposals are never returned by the engine. */
-export type CatalogItemLabel = { id: string; kind: CatalogLabelKind; label: string };
+export type CatalogLabelKind = 'topic' | 'place' | 'organization' | 'person' | 'event' | 'series';
+/**
+ * An accepted label; proposals are never returned by the engine. A `series`
+ * label on an item carries its reading order (`issue_position`, from 0) and
+ * the issue's name (`issue_label`, such as "Volume 3").
+ */
+export type CatalogItemLabel = { id: string; kind: CatalogLabelKind; label: string; issue_position?: number; issue_label?: string };
 export type CatalogLabel = CatalogItemLabel & { items: number };
 /** A matching page from archive-wide text search (`text` filter). */
 export type CatalogTextHit = { representation: string; page: number; snippet: string };
@@ -19,7 +23,7 @@ export type CatalogPage = { items: CatalogItem[]; total: number; page: number; s
 /** A person credited on visible items; `items` counts the items that credit them. */
 export type CatalogCreator = { name: string; items: number };
 export type CatalogCollection = { id: string; title: string; policy: string; items: number; media: CatalogMedia[] };
-export type CatalogFilter = { collection: string; media: CatalogMedia | ''; query: string; page: number; creator?:string; dateFrom?:string; dateTo?:string; label?:string; text?:string };
+export type CatalogFilter = { collection: string; media: CatalogMedia | ''; query: string; page: number; creator?:string; dateFrom?:string; dateTo?:string; label?:string; series?:string; text?:string };
 export type RepresentationTransport = {media:CatalogMedia;policy:string;url:string;source_url:string;source_provider?:string;file:string};
 
 const providerPattern = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
@@ -60,9 +64,16 @@ export function catalogURL(filter: CatalogFilter): string {
   if(filter.creator)params.set('creator',filter.creator);
   if(filter.dateFrom)params.set('date_from',filter.dateFrom);
   if(filter.dateTo)params.set('date_to',filter.dateTo);
-  if(filter.label)params.set('label',filter.label);
+  // The engine filters by one accepted label; a series label also sets issue order.
+  if(filter.series&&filter.label&&filter.series!==filter.label)throw new Error('Filter by a label or a series, not both.');
+  if(filter.series||filter.label)params.set('label',filter.series||filter.label||'');
   if(filter.text?.trim())params.set('text',filter.text);
   return `/api/catalog/v1/items?${params}`;
+}
+
+/** The item's issue of a series (its `series` label), if it belongs to it. */
+export function catalogSeriesIssue(item: Pick<CatalogItem,'labels'>, series: string): CatalogItemLabel | undefined {
+  return item.labels?.find(label => label.kind === 'series' && label.id === series);
 }
 
 /** Accepted labels on items visible in a collection, optionally of one kind. */

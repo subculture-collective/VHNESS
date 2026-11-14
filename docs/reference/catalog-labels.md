@@ -62,5 +62,9 @@ The print compatibility routes also serve series:
   (core 0.4.11) follow the [creator facet](mixed-catalog.md) rules, counting
   published documents and keeping the spelling of the first document by title.
 
+In `@subcult/archive-viewer/catalog` (viewer 0.4.12), `useCatalog({series})`
+requests the series filter and `catalogSeriesIssue(item, series)` returns an
+item's issue label and position.
+
 Evidence is stored for review and is not exposed by the API. Keep generated
 proposals reproducible: record the method version and the inputs it read.
