@@ -39,6 +39,13 @@ export type PrintReaderProps = {
 
 type Zoom = 'page' | 'width' | '1.25' | '1.5' | '2';
 
+/** The page a typed page number goes to: whole numbers are clamped to the document, anything else keeps the current page. */
+export function printPageFromInput(value: string, current: number, pages: number): number {
+  const typed = value.trim();
+  if (!/^\d+$/.test(typed)) return current;
+  return Math.min(Math.max(Number(typed), 1), Math.max(pages, 1));
+}
+
 export function initialPrintPage(value: number | undefined, pages?: number): number {
   const page = value !== undefined && Number.isInteger(value) && value > 0 ? value : 1;
   return pages ? Math.min(page, pages) : page;
@@ -89,6 +96,10 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
   const [pageTop, setPageTop] = useState<number | null>(null);
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
   const [toolOpen, setToolOpen] = useState(false);
+  // What the reader has typed into the page field; it turns the page only on Enter or when the field loses focus.
+  const [pageDraft, setPageDraft] = useState(String(initialPrintPage(initialPage)));
+  const panel = useRef<HTMLDivElement>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
   const [text, setText] = useState('');
   // Whether the last rendered page had a text layer; kept while the next page loads so the control does not flicker.
   const [hasText, setHasText] = useState(true);
@@ -102,11 +113,41 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
   const section = useRef<HTMLElement>(null);
   const searchController = useRef<AbortController | null>(null);
   const expanded = isFullscreen || overlay;
+  // The PDF itself could not be opened: there is no page to show, turn, enlarge or read.
+  const openFailed = !document && Boolean(error);
+  const toolAvailable = Boolean(searchToggle && !openFailed && (search || hasText));
   const effectiveZoom: Zoom = zoom;
   // Only the whole-page fit depends on the box height; at other zooms the box grows with the page.
   const fitWidth = box.width;
   const fitHeight = effectiveZoom === 'page' ? box.height : 0;
   useEffect(() => () => searchController.current?.abort(), []);
+  useEffect(() => { setPageDraft(String(page)); }, [page]);
+  // The panel can lose its toggle (a page without text and no search); close it rather than leave it stranded.
+  useEffect(() => { if (!toolAvailable) setToolOpen(false); }, [toolAvailable]);
+  useEffect(() => {
+    if (!toolOpen || !panel.current) return;
+    // On a phone the panel opens under the page, often below the screen; bring it into view.
+    panel.current.scrollIntoView?.({ block: 'nearest' });
+    panel.current.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
+  }, [toolOpen]);
+  useEffect(() => {
+    const reader = section.current;
+    if (!overlay || !reader) return;
+    // The overlay covers the page but, unlike native full screen, does not make the rest of it inert.
+    // Mark everything outside the reader inert so Tab and screen readers stay inside, and restore it on exit.
+    const marked: Element[] = [];
+    for (let node: Element = reader; node.parentElement && node !== globalThis.document.body; node = node.parentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && !sibling.hasAttribute('inert')) { sibling.setAttribute('inert', ''); marked.push(sibling); }
+      }
+    }
+    const button = fullscreenButton.current;
+    button?.focus({ preventScroll: true });
+    return () => {
+      for (const element of marked) element.removeAttribute('inert');
+      button?.focus({ preventScroll: true });
+    };
+  }, [overlay]);
   useEffect(() => {
     const pageRow = row.current, pageBox = wrapper.current;
     if (!pageRow || !pageBox) return;
@@ -179,6 +220,12 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     })().catch(() => { if (!cancelled) { setError('This page could not be rendered.'); setLoading(false); } });
     return () => { cancelled = true; render?.cancel(); };
   }, [document, page, fitWidth, fitHeight, effectiveZoom]);
+  function commitPageDraft() {
+    if (!document) { setPageDraft(String(page)); return; }
+    const target = printPageFromInput(pageDraft, page, document.numPages);
+    setPageDraft(String(target));
+    if (target !== page) go(target);
+  }
   function go(next: number) {
     if (document && Number.isInteger(next) && next >= 1 && next <= document.numPages) {
       setPage(next); onPageChange?.(next);
@@ -269,7 +316,7 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     {result?.pending && <p role="status">Searching document text…</p>}
     {result?.error && <p role="alert">{result.error}</p>}
     {result?.hits && <div aria-live="polite"><p>{result.hits.length} matching pages or text sections</p>{result.hits.map((hit, index) => <p key={index}>
-      {hit.page > 0 ? <button onClick={() => go(hit.page)}>Page {hit.page}</button> : 'Document text; page mapping unavailable'}: {hit.snippet}
+      {hit.page > 0 ? document ? <button onClick={() => go(hit.page)}>Page {hit.page}</button> : `Page ${hit.page}` : 'Document text; page mapping unavailable'}: {hit.snippet}
     </p>)}</div>}
   </>;
   const style = { ...(pageRatio ? { '--print-page-ratio': pageRatio } : {}), ...(pageTop !== null ? { '--print-page-top': `${pageTop}px` } : {}) } as CSSProperties;
@@ -279,18 +326,23 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
       {fullscreen && expanded && <span className="reader-title">{title}</span>}
       {!pageArrows && previous}
       <span className="reader-pages">
-        <label><span className="reader-label">Page</span> <input aria-label="Page number" type="number" min={1} max={document?.numPages || 1} value={page} onChange={event => go(Number(event.target.value))} /></label>
+        <label><span className="reader-label">Page</span> <input aria-label="Page number" type="number" inputMode="numeric" min={1} max={document?.numPages || 1} value={pageDraft} disabled={openFailed}
+          onChange={event => setPageDraft(event.target.value)} onBlur={commitPageDraft}
+          onKeyDown={event => {
+            if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); }
+            else if (event.key === 'Escape') setPageDraft(String(page));
+          }} /></label>
         <span className="reader-count">of {document?.numPages || '…'}</span>
       </span>
       {!pageArrows && next}
-      <label><span className="reader-label">Zoom</span> <select aria-label="Zoom" value={zoom} onChange={event => setZoom(event.target.value as Zoom)}>
+      <label><span className="reader-label">Zoom</span> <select aria-label="Zoom" value={zoom} disabled={openFailed} onChange={event => setZoom(event.target.value as Zoom)}>
         {fitPage && <option value="page">Whole page</option>}
         <option value="width">Fit width</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option>
       </select></label>
-      {fullscreen && <button type="button" className="reader-fullscreen" aria-pressed={expanded} title={expanded ? 'Exit full screen (Esc)' : 'Full screen (F)'} onClick={toggleFullscreen}>
+      {fullscreen && !openFailed && <button type="button" ref={fullscreenButton} className="reader-fullscreen" aria-pressed={expanded} title={expanded ? 'Exit full screen (Esc)' : 'Full screen (F)'} onClick={toggleFullscreen}>
         <FullscreenIcon exit={expanded} /><span className="reader-fullscreen-label">{expanded ? 'Exit full screen' : 'Full screen'}</span>
       </button>}
-      {searchToggle && (searchForm || hasText) && <button type="button" className="reader-tool" aria-expanded={toolOpen} aria-controls="reader-tool-panel"
+      {toolAvailable && <button type="button" className="reader-tool" aria-expanded={toolOpen} aria-controls="reader-tool-panel"
         title="Search this document and read the page's text" onClick={() => setToolOpen(open => !open)}><SearchIcon /><span className="reader-tool-label">Search &amp; text</span></button>}
   </div>;
   return <section className="reader" aria-label="Document reader" aria-busy={loading} ref={section} data-fit={effectiveZoom === 'page' ? 'page' : 'width'} data-fullscreen={expanded || undefined}
@@ -300,16 +352,16 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     {!searchToggle && searchResults}
     {loading && <p role="status" className="reader-loading">Loading page…</p>}
     {error && <p role="alert">{error}</p>}
-    <div className="reader-page" ref={row}>
+    {!openFailed && <div className="reader-page" ref={row}>
       {pageArrows && previous}
       <div className="canvas-wrap" ref={wrapper} style={swipeable ? { touchAction: 'pan-y pinch-zoom' } : undefined} onPointerDown={swipeStart} onPointerUp={swipeEnd} onPointerCancel={() => { swipe.current = null; }}><canvas ref={canvas} aria-label={`${title}, PDF page ${page}`} data-testid="pdf-canvas" /></div>
       {pageArrows && next}
-    </div>
-    {pageArrows && controls}
-    {searchToggle && toolOpen && <div className="reader-panel" id="reader-tool-panel">
-      {searchForm}{searchResults}
-      {hasText && <section className="reader-panel-text" aria-label="Readable text for this page"><h3>Text on this page</h3><p>{text || 'Loading page text…'}</p></section>}
     </div>}
-    {!searchToggle && (hasText || !pageArrows) && <details className="reader-text"><summary>Readable text for this page</summary><p>{text || 'No text layer is available on this page.'}</p></details>}
+    {pageArrows && controls}
+    {toolAvailable && toolOpen && <div className="reader-panel" id="reader-tool-panel" ref={panel}>
+      {searchForm}{searchResults}
+      {hasText && <section className="reader-panel-text" aria-label="Readable text for this page"><h3>Text on this page</h3><p>{text || (loading ? 'Loading page text…' : 'No text layer is available on this page.')}</p></section>}
+    </div>}
+    {!searchToggle && !openFailed && (hasText || !pageArrows) && <details className="reader-text"><summary>Readable text for this page</summary><p>{text || 'No text layer is available on this page.'}</p></details>}
   </section>;
 }

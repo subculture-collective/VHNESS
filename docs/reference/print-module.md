@@ -14,6 +14,9 @@ From viewer `0.4.9`, the optional `pageArrows`, `fitPage`, `fullscreen` and
 `searchToggle` props add page arrows with keyboard and swipe turning, a
 "Whole page" fit, full screen and a search-and-text panel. The reader exposes
 `--print-page-ratio` and `--print-page-top` for the consumer's fitting CSS.
+From `0.4.10` the page field commits on Enter or blur, a PDF that cannot
+be opened shows only the error, and the overlay full screen marks the rest of
+the page `inert`.
 
 `vhness index-print` indexes an already preserved, reviewed PDF. `VHNESS_MEDIA`
 contains immutable originals; `VHNESS_DERIVATIVES` is a separate directory for

@@ -1,3 +1,25 @@
+## 0.4.10
+
+`PrintReader` fixes, found by testing the Riot Grrrl reader in a browser
+(subculture-collective/arkhiv-riot-grrrl#25). No new props.
+
+- The page field is a draft: typing no longer turns the page on every
+  keystroke, and the field can be cleared. Enter or leaving the field goes to
+  the page, clamped to the document; Escape restores the current page.
+  `printPageFromInput()` is exported.
+- When the PDF cannot be opened, the reader shows only the error: no empty page
+  box, full-screen or Search & text button, and the page and zoom controls are
+  disabled. Search hits are listed without page buttons that cannot work.
+- The Search & text panel closes when its button goes away (a page without text
+  and no search), instead of staying open with no way to close it. Its text
+  reads "No text layer is available on this page." rather than "Loading page
+  text…" once the page has loaded.
+- The overlay used where the Fullscreen API is missing (iPhone Safari) is now
+  modal: the rest of the page is marked `inert` while it is open, focus moves to
+  the full-screen button, and both are restored when it closes.
+- Opening the Search & text panel scrolls it into view and focuses its search
+  field, so on a phone it no longer opens below the screen unnoticed.
+
 ## 0.4.9
 
 `PrintReader` gains an opt-in reading layout. Existing consumers see no change.
