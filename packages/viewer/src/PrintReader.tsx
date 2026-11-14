@@ -128,8 +128,12 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     if (!toolOpen || !panel.current) return;
     // On a phone the panel opens under the page, often below the screen; bring it into view.
     panel.current.scrollIntoView?.({ block: 'nearest' });
-    panel.current.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
+    // Focus the search field only with a mouse or trackpad: on a touch screen it would raise the keyboard
+    // over the panel for a reader who opened it to read the page's text.
+    if (globalThis.matchMedia?.('(pointer: fine)').matches) panel.current.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
   }, [toolOpen]);
+  // A failed open removes the full-screen button; never leave the reader stuck as an overlay without it.
+  useEffect(() => { if (openFailed) setOverlay(false); }, [openFailed]);
   useEffect(() => {
     const reader = section.current;
     if (!overlay || !reader) return;
@@ -220,15 +224,15 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
     })().catch(() => { if (!cancelled) { setError('This page could not be rendered.'); setLoading(false); } });
     return () => { cancelled = true; render?.cancel(); };
   }, [document, page, fitWidth, fitHeight, effectiveZoom]);
-  function commitPageDraft() {
+  function commitPageDraft(value = pageDraft) {
     if (!document) { setPageDraft(String(page)); return; }
-    const target = printPageFromInput(pageDraft, page, document.numPages);
+    const target = printPageFromInput(value, page, document.numPages);
     setPageDraft(String(target));
     if (target !== page) go(target);
   }
   function go(next: number) {
     if (document && Number.isInteger(next) && next >= 1 && next <= document.numPages) {
-      setPage(next); onPageChange?.(next);
+      setPage(next); setPageDraft(String(next)); onPageChange?.(next);
       // A zoomed page starts at its top; bring the page back into view if the reader scrolled past it.
       wrapper.current?.scrollTo?.({ top: 0, left: 0 });
       if (row.current && row.current.getBoundingClientRect().top < 0) row.current.scrollIntoView?.({ block: 'start' });
@@ -274,6 +278,7 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
   }, [overlay]);
   function toggleFullscreen() {
     if (overlay) { setOverlay(false); return; }
+    if (openFailed) return;
     if (globalThis.document.fullscreenElement) { void globalThis.document.exitFullscreen().catch(() => undefined); return; }
     if (fitPage) setZoom('page');
     const request = section.current?.requestFullscreen?.bind(section.current);
@@ -327,10 +332,15 @@ function ReaderSession({ url, backend, title, initialPage, onPageChange, search,
       {!pageArrows && previous}
       <span className="reader-pages">
         <label><span className="reader-label">Page</span> <input aria-label="Page number" type="number" inputMode="numeric" min={1} max={document?.numPages || 1} value={pageDraft} disabled={openFailed}
-          onChange={event => setPageDraft(event.target.value)} onBlur={commitPageDraft}
+          onChange={event => {
+            setPageDraft(event.target.value);
+            // Typing waits for Enter or blur; the spinner arrows, arrow keys and wheel step the value and turn at once.
+            if (typeof InputEvent !== 'undefined' && !(event.nativeEvent instanceof InputEvent)) commitPageDraft(event.target.value);
+          }} onBlur={() => commitPageDraft()}
           onKeyDown={event => {
             if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); }
-            else if (event.key === 'Escape') setPageDraft(String(page));
+            // Escape restores the field; it should not also leave full screen.
+            else if (event.key === 'Escape' && pageDraft !== String(page)) { event.nativeEvent.stopImmediatePropagation(); setPageDraft(String(page)); }
           }} /></label>
         <span className="reader-count">of {document?.numPages || '…'}</span>
       </span>

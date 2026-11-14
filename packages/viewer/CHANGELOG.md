@@ -5,11 +5,14 @@
 
 - The page field is a draft: typing no longer turns the page on every
   keystroke, and the field can be cleared. Enter or leaving the field goes to
-  the page, clamped to the document; Escape restores the current page.
-  `printPageFromInput()` is exported.
+  the page, clamped to the document; Escape restores the current page (and
+  does not also leave full screen). The spinner arrows, arrow keys and wheel
+  still turn the page at once. `printPageFromInput()` is exported.
 - When the PDF cannot be opened, the reader shows only the error: no empty page
   box, full-screen or Search & text button, and the page and zoom controls are
-  disabled. Search hits are listed without page buttons that cannot work.
+  disabled, and full screen (including the F key and an overlay opened while
+  the PDF loaded) closes. Search hits are listed without page buttons that
+  cannot work.
 - The Search & text panel closes when its button goes away (a page without text
   and no search), instead of staying open with no way to close it. Its text
   reads "No text layer is available on this page." rather than "Loading page
@@ -17,8 +20,10 @@
 - The overlay used where the Fullscreen API is missing (iPhone Safari) is now
   modal: the rest of the page is marked `inert` while it is open, focus moves to
   the full-screen button, and both are restored when it closes.
-- Opening the Search & text panel scrolls it into view and focuses its search
-  field, so on a phone it no longer opens below the screen unnoticed.
+- Opening the Search & text panel scrolls it into view, so on a phone it no
+  longer opens below the screen unnoticed. With a mouse or trackpad it also
+  focuses the search field; on touch screens it does not, so the keyboard does
+  not cover the page text.
 
 ## 0.4.9
 
