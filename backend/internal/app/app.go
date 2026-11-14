@@ -23,6 +23,7 @@ import (
 
 type Server struct {
 	Compatibility    string
+	Version          string
 	Revision         string
 	DB               *catalog.DB
 	Community        *community.Server
@@ -108,7 +109,7 @@ func (s *Server) Handler() http.Handler {
 		if s.DB != nil && s.DB.PublicOnly {
 			audience = "public"
 		}
-		write(w, 200, map[string]any{"api_version": "1", "audience": audience, "collection": s.Collection, "collections": s.collectionScope(), "modules": map[string]string{"catalog": "1", "print": "1", "audio": "1", "video": "1", "source_catalog": "1", "source_discovery": "1", "source_artist_photos": "1", "source_artist_media": "1", "source_classification": "1"}, "community": s.communityFeatures()})
+		write(w, 200, map[string]any{"api_version": "1", "core_version": s.Version, "revision": s.Revision, "audience": audience, "collection": s.Collection, "collections": s.collectionScope(), "modules": map[string]string{"catalog": "1", "print": "1", "audio": "1", "video": "1", "source_catalog": "1", "source_discovery": "1", "source_artist_photos": "1", "source_artist_media": "1", "source_classification": "1"}, "community": s.communityFeatures()})
 	})
 	mux.HandleFunc("GET /api/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.DB.Pool.Ping(r.Context()); err != nil {
