@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PrintReader, initialPrintPage, printPageScale, type PrintBackend } from './print.js';
+import { PrintReader, initialPrintPage, printPageFromInput, printPageScale, type PrintBackend } from './print.js';
 
 describe('shared print reader', () => {
   it('keeps invalid and restored page positions within the document', () => {
@@ -46,6 +46,18 @@ describe('shared print reader', () => {
     expect(toggled).toMatch(/<button type="button" class="reader-tool" aria-expanded="false" aria-controls="reader-tool-panel"[^>]*><svg[^]*<span class="reader-tool-label">Search &amp; text<\/span><\/button>/);
     expect(toggled).not.toContain('<form');
     expect(toggled).not.toContain('<details');
+  });
+  it('turns a typed page number into a page in the document', () => {
+    expect(printPageFromInput('30', 16, 44)).toBe(30);
+    expect(printPageFromInput(' 7 ', 16, 44)).toBe(7);
+    expect(printPageFromInput('45', 16, 44)).toBe(44);
+    expect(printPageFromInput('0', 16, 44)).toBe(1);
+    for (const value of ['', '-3', '2.5', 'abc', '1e2']) expect(printPageFromInput(value, 16, 44)).toBe(16);
+  });
+  it('keeps the page field as a draft that does not navigate while typing', () => {
+    const backend: PrintBackend = { open: () => { throw new Error('Server rendering must not fetch a PDF'); } };
+    const markup = renderToStaticMarkup(<PrintReader url="/api/approved.pdf" backend={backend} title="Fixture edition" initialPage={5} />);
+    expect(markup).toMatch(/<input aria-label="Page number" type="number" inputMode="numeric" min="1" max="1" value="5"/);
   });
   it('fits the whole page into the box or scales from the width', () => {
     const page = { width: 600, height: 900 };
