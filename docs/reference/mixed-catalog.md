@@ -19,6 +19,12 @@ search. `label` limits results to items with that accepted label; items list
 their accepted `labels`. A `series` label returns its items in issue order, and
 its entry in `labels` carries `issue_position` and `issue_label`
 ([catalog labels](catalog-labels.md#series)). Caption and transcript search are not advertised.
+`GET /api/catalog/v1/creators?collection=` (core 0.4.11) lists the people credited
+on items visible in the audience scope as `[{name, items}]`, where `items` is the
+number of items that credit them. Credits are split on commas and trimmed, and
+names that differ only in case are one person, shown with the spelling of the
+newest item that uses it. The list is sorted by name, ignoring case. A public
+server counts only public items; a foreign collection returns 404.
 `GET /api/catalog/v1/items/{id}` uses the same collection and representation
 visibility checks. A foreign collection returns 404 under the existing server
 collection scope. An item exposes only representations and membership visible

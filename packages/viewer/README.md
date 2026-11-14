@@ -63,7 +63,8 @@ helpers from `@subcult/archive-viewer/audio`. The engine supplies a verified
 continuous recording URL; the consumer owns station polling and navigation.
 Source credits, warnings and track order remain in the recording contract.
 
-The catalog entry exports `useCatalog`, scoped metadata query types and reviewed
+The catalog entry exports `useCatalog`, `useCatalogCreators` (creator
+suggestions served by the core), scoped metadata query types and reviewed
 representation URL validation from `@subcult/archive-viewer/catalog`. Consumers
 own collection filters, item detail, navigation and media composition. The hook
 hides superseded results immediately and cancels their requests. The neutral

@@ -102,6 +102,13 @@ func TestPublicPublicationIntegration(t *testing.T) {
 		}
 	}
 	count(0)
+	creators := func(want string) {
+		t.Helper()
+		if w := get("/api/catalog/v1/creators"); w.Code != 200 || w.Body.String() != want+"\n" {
+			t.Fatalf("public creators: %d %s", w.Code, w.Body.String())
+		}
+	}
+	creators("[]")
 	printPath := "/api/catalog/v1/items/print/representations/pdf"
 	for _, path := range []string{"/api/episodes/video", "/api/playback/video", "/api/media/video", printPath + "/resolve?collection=" + c.ID, printPath + "/media?collection=" + c.ID, printPath + "/print?collection=" + c.ID, printPath + "/cover?collection=" + c.ID, printPath + "/search?q=fixture&collection=" + c.ID, "/api/status?collection=" + c.ID} {
 		if w := get(path); w.Code != 404 {
@@ -119,6 +126,10 @@ func TestPublicPublicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	count(1)
+	creators(`[{"name":"Fixture author","items":1}]`)
+	if w := get("/api/catalog/v1/creators?collection=elsewhere"); w.Code != 404 {
+		t.Fatal("creators outside the collection scope", w.Code)
+	}
 	if !server.communityAvailable(ctx, c.ID, "catalog:"+item.ID) || server.communityAvailable(ctx, videoCollection.ID, "catalog:"+item.ID) {
 		t.Fatal("catalog favorite bypassed collection/public availability")
 	}
@@ -154,7 +165,7 @@ func TestPublicPublicationIntegration(t *testing.T) {
 	if w := get("/api/documents?q=solidarity"); w.Code != 200 || !strings.Contains(w.Body.String(), `"total":1`) || strings.Contains(w.Body.String(), "operator-only") || strings.Contains(w.Body.String(), "Private operator note") {
 		t.Fatal("retained metadata/OCR search", w.Code, w.Body.String())
 	}
-	if w := get("/api/facets"); w.Code != 200 || w.Body.String() != "{\"series\":[],\"subjects\":[\"print\"]}\n" {
+	if w := get("/api/facets"); w.Code != 200 || w.Body.String() != "{\"creators\":[{\"name\":\"Fixture author\",\"items\":1}],\"series\":[],\"subjects\":[\"print\"]}\n" {
 		t.Fatal("compatibility facets", w.Code, w.Body.String())
 	}
 	if w := get("/api/documents/print"); w.Code != 200 || !strings.Contains(w.Body.String(), "unknown-rights") || !strings.Contains(w.Body.String(), `"pages":1`) {
@@ -318,6 +329,12 @@ func TestPublicPublicationIntegration(t *testing.T) {
 	}
 	if server.communityAvailable(ctx, c.ID, "catalog:"+item.ID) {
 		t.Fatal("stale public item remained available for favorites")
+	}
+	// The stale item's creator no longer counts on either API.
+	publicCreators := `[{"name":"Different creator","items":1},{"name":"Filter author","items":29}]`
+	creators(publicCreators)
+	if w := get("/api/facets"); w.Code != 200 || !strings.Contains(w.Body.String(), `"creators":`+publicCreators) {
+		t.Fatal("compatibility creator facets", w.Code, w.Body.String())
 	}
 	// An accepted series lists its public issues in issue order on both APIs.
 	if err = operator.ImportLabels(ctx, []domain.Label{{ID: "riot", Kind: domain.SeriesKind, Label: "Riot Grrrl"}}); err != nil {

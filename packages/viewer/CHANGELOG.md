@@ -1,3 +1,12 @@
+## 0.4.11
+
+Creator suggestions come from the core instead of a whole-catalog fetch in the
+browser. `useCatalogCreators(collection)` returns `creators`
+(`[{name, items}]`), `error`, `pending` and `retry`, like `useCatalog`;
+`catalogCreatorsURL()` builds its URL and `CatalogCreator` types an entry.
+Shared credits are split on commas and spellings that differ only in case are
+one person. Needs core 0.4.11.
+
 ## 0.4.10
 
 `PrintReader` fixes, found by testing the Riot Grrrl reader in a browser

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { catalogFavoriteID, catalogLabelsURL, catalogSelectionURL, catalogRequest, catalogURL, representationURL, sourceProvider, type RepresentationTransport } from './catalog.js';
+import { catalogCreatorsURL, catalogFavoriteID, catalogLabelsURL, catalogSelectionURL, catalogRequest, catalogURL, representationURL, sourceProvider, type RepresentationTransport } from './catalog.js';
 
 test('metadata queries preserve collection scope and escape user text',()=> {
   const url = new URL(catalogURL({collection:'mixed',media:'print',query:'&collection=other',page:2}),'https://test.invalid');
@@ -16,6 +16,11 @@ test('label and text filters are sent only when set',()=> {
   expect(plain.searchParams.has('label')).toBe(false);
   expect(catalogLabelsURL('regional','topic')).toBe('/api/catalog/v1/labels?collection=regional&kind=topic');
   expect(catalogLabelsURL('')).toBe('/api/catalog/v1/labels');
+});
+test('creator suggestions keep the collection scope and escape it',()=> {
+  expect(catalogCreatorsURL('riot-grrrl')).toBe('/api/catalog/v1/creators?collection=riot-grrrl');
+  expect(catalogCreatorsURL('a&kind=x')).toBe('/api/catalog/v1/creators?collection=a%26kind%3Dx');
+  expect(catalogCreatorsURL('')).toBe('/api/catalog/v1/creators');
 });
 const asset: RepresentationTransport = {media:'print',policy:'local_preserve',file:'paper.pdf',source_url:'https://archive.org/details/paper',url:'/api/catalog/v1/items/paper/representations/pdf/media?collection=mixed&action=read&file=paper.pdf'};
 test('representation URLs bind source identity, exact file and viewer action',()=> {

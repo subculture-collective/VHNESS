@@ -84,7 +84,12 @@ func (s *Server) legacyFacets(w http.ResponseWriter, r *http.Request) {
 		write(w, 503, map[string]string{"error": "catalog unavailable"})
 		return
 	}
-	write(w, 200, map[string]any{"subjects": facets, "series": series})
+	creators, err := s.DB.LegacyPrintCreators(r.Context(), s.configuredCollection())
+	if err != nil {
+		write(w, 503, map[string]string{"error": "catalog unavailable"})
+		return
+	}
+	write(w, 200, map[string]any{"subjects": facets, "series": series, "creators": creators})
 }
 func (s *Server) legacyPrintMapping(r *http.Request) bool {
 	var item, rep string
