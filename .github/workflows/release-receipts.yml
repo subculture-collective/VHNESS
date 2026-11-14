@@ -1,0 +1,57 @@
+name: Release receipts
+run-name: Release receipts ${{ github.sha }}
+# Gitea Actions publishes the core image and the viewer package when a version
+# bump reaches its copy of main, but Gitea pull requests are off. This job waits
+# for the published artifact, writes its receipt from the registry, and lands it
+# here through a pull request that merges once Mirror CI passes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/reference/core-version.json
+      - packages/viewer/package.json
+  workflow_dispatch: null
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: release-receipts
+  cancel-in-progress: false
+jobs:
+  receipts:
+    name: Record published releases
+    if: github.repository == 'subculture-collective/arkhiv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for the published artifacts and write their receipts
+        run: python3 scripts/land_release_receipts.py --wait-minutes 150
+      - name: Land the receipts through an auto-merging pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- docs/releases)" ]; then
+            echo "Receipts already committed."
+            exit 0
+          fi
+          branch="release/receipts-${GITHUB_SHA::12}"
+          git fetch --quiet origin main
+          git stash push --include-untracked --quiet -- docs/releases
+          git switch -c "$branch" origin/main
+          git stash pop --quiet
+          git add docs/releases
+          git -c user.name='SUBCULT Agent' -c user.email='info@subcult.tv' -c commit.gpgsign=false \
+            commit -m "release: record published receipts for ${GITHUB_SHA::12}" -m "$(git status --porcelain -- docs/releases | sed 's/^/  /')"
+          git push origin "$branch"
+          url=$(gh pr create --base main --head "$branch" --title "Record published release receipts" \
+            --body "Receipts written by the Release receipts workflow from the artifacts Gitea Actions published for \`$GITHUB_SHA\`.")
+          # Pushes and pull requests made with this token start no workflows, so
+          # run the required Mirror CI check explicitly, then let it merge.
+          gh workflow run mirror-ci.yml --ref "$branch"
+          gh pr merge --auto --squash "$url"
+          echo "$url"

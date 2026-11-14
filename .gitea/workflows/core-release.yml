@@ -128,24 +128,3 @@ jobs:
           path: .artifacts/core-release-*.json
           if-no-files-found: error
           include-hidden-files: true
-      - name: Land the receipt through an auto-merging pull request
-        if: steps.select.outputs.release == 'true'
-        env:
-          ARCHIVE_UPGRADE_TOKEN: ${{ secrets.ARCHIVE_UPGRADE_TOKEN }}
-          CORE_VERSION: ${{ steps.select.outputs.version }}
-        run: |
-          set -euo pipefail
-          test -n "$ARCHIVE_UPGRADE_TOKEN"
-          receipt="docs/releases/core-release-$CORE_VERSION.json"
-          if [ -f "$receipt" ]; then
-            cmp -s "$receipt" ".artifacts/core-release-$CORE_VERSION.json" || { echo "Committed receipt differs from this run's receipt; inspect before replacing" >&2; exit 1; }
-            echo "Receipt already committed."
-            exit 0
-          fi
-          cp ".artifacts/core-release-$CORE_VERSION.json" "$receipt"
-          branch="release/core-$CORE_VERSION"
-          git switch -c "$branch"
-          git add "$receipt"
-          git -c user.name='SUBCULT Agent' -c user.email='info@subcult.tv' -c commit.gpgsign=false commit -m "release(core): record published $CORE_VERSION core receipt"
-          git -c credential.helper= -c 'credential.helper=!f() { echo username=subcult-agent; echo "password=$ARCHIVE_UPGRADE_TOKEN"; }; f' push origin "$branch"
-          python3 scripts/receipt_pull_request.py --branch "$branch" --title "Record core $CORE_VERSION release receipt" --body "Automated receipt for the published immutable core image. Merging it starts the consumer upgrade proposals."

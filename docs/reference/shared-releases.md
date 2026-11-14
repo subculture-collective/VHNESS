@@ -38,17 +38,24 @@ release and collection approvals remain independent of package publication.
 
 ## Automated releases
 
-`viewer-release` publishes `@subcult/archive-viewer` when a merge on `main`
-changes the version in `packages/viewer/package.json`, after the full `make
-verify` gate with a job-owned database. It writes the SDK receipt with
-`scripts/viewer_receipt.py`, carrying the previous receipt's compatible core
-unless the dispatch names another, and lands it through a `release/viewer-<v>`
-pull request that merges once `verify` passes. `core-release` does the same for
-`docs/reference/core-version.json` changes (tags still work) and lands
-`core-release-<v>.json` through `release/core-<v>`. A version that already has a
-committed receipt is skipped; a version already in the registry without a
-receipt stops the job for an operator. Each merged receipt starts the consumer
-proposals described in [consumer upgrades](consumer-upgrades.md).
+The Gitea workflow `viewer-release` publishes `@subcult/archive-viewer` when a
+merge on `main` changes the version in `packages/viewer/package.json`, after the
+full `make verify` gate with a job-owned database. `core-release` does the same
+for `docs/reference/core-version.json` changes (tags still work) and pushes the
+core image. A version that already has a committed receipt is skipped; a viewer
+version already in the registry without a receipt stops the job for an operator.
+
+Gitea pull requests have been off since 2026-11-10, so the receipts land on
+GitHub. After the same version bump, the GitHub `Release receipts` workflow runs
+`scripts/land_release_receipts.py`. It waits up to 150 minutes for the published
+artifact, reading the registries anonymously. For the core image it accepts the
+bump commit or a later `main` commit whose image labels name that revision and
+version. It then writes the receipt with `scripts/core_release.py` or
+`scripts/viewer_receipt.py` (the viewer receipt keeps the previous compatible
+core) and opens a `release/receipts-<sha>` pull request. Because its token
+starts no workflows, it dispatches Mirror CI on that branch and enables
+auto-merge. Each merged receipt starts the consumer proposals described in
+[consumer upgrades](consumer-upgrades.md).
 
 ## Independent SDK patches
 
