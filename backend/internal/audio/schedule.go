@@ -40,7 +40,7 @@ func RenewPublicSchedule(ctx context.Context, db *catalog.DB, mediaRoot, derivat
 		if err != nil {
 			return schedule, err
 		}
-		f, err := Verify(mediaRoot, derivativeRoot, entry, asset, domain.ScheduleAction)
+		f, err := Verify(nil, mediaRoot, derivativeRoot, entry, asset, domain.ScheduleAction)
 		if err != nil {
 			return schedule, err
 		}

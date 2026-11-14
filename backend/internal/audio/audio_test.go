@@ -161,6 +161,48 @@ func TestContinuousAudioRightsAndStationIntegration(t *testing.T) {
 	if w := get("/api/station", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &legacyState) != nil || legacyState.Program.RecordingID != "first" || legacyState.Revision != schedule.Revision || legacyState.Offset != 1.5 || legacyState.Track != 1 || legacyState.Next == nil || legacyState.Next.RecordingID != "future" {
 		t.Fatal("legacy station timeline", w.Code, w.Body.String())
 	}
+	// Unchanged inputs and the derivative are hashed once, not on every range
+	// read or station poll. Files written within the last second are always
+	// rehashed, so let the fixtures age first.
+	time.Sleep(1100 * time.Millisecond)
+	if w := get("/api/audio/first", nil); w.Code != 200 {
+		t.Fatal("warm verification", w.Code)
+	}
+	warm := server.AudioFiles.Hashed()
+	if warm == 0 {
+		t.Fatal("audio routes bypassed the verified-file state")
+	}
+	for i := 0; i < 3; i++ {
+		if w := get("/api/audio/first", map[string]string{"Range": "bytes=44-"}); w.Code != 206 || w.Header().Get("ETag") != `"`+asset.SHA256+`"` || !bytes.Equal(w.Body.Bytes(), continuous[44:]) {
+			t.Fatal("verified range read", w.Code, w.Header())
+		}
+		if w := get("/api/station", nil); w.Code != 200 {
+			t.Fatal("verified station poll", w.Code, w.Body.String())
+		}
+		if w := get("/api/audio/channel", nil); !bytes.Contains(w.Body.Bytes(), []byte(`"state":"playing"`)) {
+			t.Fatal("verified native station poll", w.Body.String())
+		}
+	}
+	if hashed := server.AudioFiles.Hashed(); hashed != warm {
+		t.Fatal("unchanged audio files reread per request", warm, hashed)
+	}
+	sameSize := bytes.Clone(continuous)
+	sameSize[len(sameSize)-1] ^= 0xff
+	if err = os.WriteFile(filepath.Join(derived, "continuous.wav"), sameSize, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if w := get("/api/audio/first", map[string]string{"Range": "bytes=0-43"}); w.Code != 503 {
+		t.Fatal("changed derivative served from earlier verification", w.Code)
+	}
+	if w := get("/api/station", nil); w.Code != 503 {
+		t.Fatal("station accepted changed derivative", w.Code)
+	}
+	if err = os.WriteFile(filepath.Join(derived, "continuous.wav"), continuous, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if w := get("/api/audio/first", map[string]string{"If-None-Match": `"` + asset.SHA256 + `"`}); w.Code != 304 {
+		t.Fatal("restored derivative conditional read", w.Code)
+	}
 	for _, path := range []string{"/api/calendar?year=1977", "/api/on-this-day?month=5&day=8", "/api/shows?q=Fixture&year=1977", "/api/dates/1977-05-08"} {
 		if w := get(path, nil); w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("1977")) {
 			t.Fatal("retained inventory contract", path, w.Code, w.Body.String())

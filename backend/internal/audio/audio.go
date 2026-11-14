@@ -20,7 +20,9 @@ import (
 )
 
 // Verify opens the derived file only after current rights and every input pass.
-func Verify(mediaRoot, derivativeRoot string, e catalog.TransportEntry, asset domain.AudioAsset, action domain.Action) (*os.File, error) {
+// With files set, inputs and the derivative are hashed once and trusted while
+// their file identity is unchanged; a nil files hashes them on every call.
+func Verify(files *preservation.VerifiedFiles, mediaRoot, derivativeRoot string, e catalog.TransportEntry, asset domain.AudioAsset, action domain.Action) (*os.File, error) {
 	if !filepath.IsAbs(mediaRoot) || !filepath.IsAbs(derivativeRoot) {
 		return nil, fmt.Errorf("separate audio original and derivative roots required")
 	}
@@ -47,7 +49,7 @@ func Verify(mediaRoot, derivativeRoot string, e catalog.TransportEntry, asset do
 			if original.Bytes != track.File.Bytes {
 				return nil, fmt.Errorf("track byte count differs from preserved original")
 			}
-			f, err := preservation.Verify(mediaRoot, original.Path, original.SHA256, original.Bytes)
+			f, err := files.Verify(mediaRoot, original.Path, original.SHA256, original.Bytes)
 			if err != nil {
 				return nil, err
 			}
@@ -58,7 +60,7 @@ func Verify(mediaRoot, derivativeRoot string, e catalog.TransportEntry, asset do
 			return nil, fmt.Errorf("recording input unavailable")
 		}
 	}
-	return preservation.Verify(derivativeRoot, asset.Path, asset.SHA256, asset.Bytes)
+	return files.Verify(derivativeRoot, asset.Path, asset.SHA256, asset.Bytes)
 }
 
 type boundedBuffer struct {
@@ -97,7 +99,7 @@ func Register(ctx context.Context, db *catalog.DB, mediaRoot, derivativeRoot, it
 	if err != nil {
 		return err
 	}
-	f, err := Verify(mediaRoot, derivativeRoot, e, asset, domain.PlayAction)
+	f, err := Verify(nil, mediaRoot, derivativeRoot, e, asset, domain.PlayAction)
 	if err != nil {
 		return err
 	}

@@ -178,7 +178,7 @@ func (s *Server) legacyAudioMedia(w http.ResponseWriter, r *http.Request) {
 		write(w, 404, map[string]string{"error": "audio unavailable"})
 		return
 	}
-	f, err := audiomodule.Verify(s.Media, s.Derivatives, e, a, domain.PlayAction)
+	f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, e, a, domain.PlayAction)
 	if err != nil {
 		write(w, 503, map[string]string{"error": "audio source unavailable"})
 		return
@@ -226,7 +226,7 @@ func (s *Server) legacyStation(w http.ResponseWriter, r *http.Request) {
 		legacy.Programs = append(legacy.Programs, music.Program{RecordingID: recording.ID, Start: p.Start, Duration: p.Duration})
 		offset := now.Sub(p.Start).Seconds()
 		if offset >= 0 && offset < p.Duration {
-			f, err := audiomodule.Verify(s.Media, s.Derivatives, e, a, domain.ScheduleAction)
+			f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, e, a, domain.ScheduleAction)
 			if err != nil {
 				write(w, 503, map[string]string{"error": "current recording failed integrity check"})
 				return
