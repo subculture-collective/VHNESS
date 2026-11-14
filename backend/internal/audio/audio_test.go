@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,6 +135,49 @@ func TestContinuousAudioRightsAndStationIntegration(t *testing.T) {
 		return w
 	}
 
+	// Dedhed's frontend shows these bodies to listeners, so they keep the
+	// legacy backend's wording.
+	offAir := "The station is off the air right now. Try again, or play a set from the library."
+	legacyError := func(w *httptest.ResponseRecorder) string {
+		var body struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		return body.Error
+	}
+	for path, want := range map[string]string{
+		"/api/recordings?year=77":                                 "Use a four-digit year and at most 200 search characters.",
+		"/api/recordings?date_from=1977-02-30":                    "Use complete YYYY-MM-DD date bounds.",
+		"/api/recordings?date_from=1977-05-09&date_to=1977-05-08": "The original-date range is reversed.",
+		"/api/recordings?page=10001":                              "That page is past the end of the shelf.",
+		"/api/recordings/absent":                                  "That tape isn't in the library.",
+		"/api/dates/1977-5-8":                                     "That isn't a date the calendar can read.",
+		"/api/calendar?year=next":                                 "That year isn't on the calendar.",
+	} {
+		status := 400
+		if strings.HasPrefix(path, "/api/recordings/") {
+			status = 404
+		}
+		if w := get(path, nil); w.Code != status || legacyError(w) != want {
+			t.Fatal("legacy error wording", path, w.Code, w.Body.String())
+		}
+	}
+	// A request whose database reads fail reports Dedhed's unavailable wording.
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	for path, want := range map[string]string{
+		"/api/recordings":       "The catalog isn't answering. Try again in a moment.",
+		"/api/recordings/first": "The catalog isn't answering. Try again in a moment.",
+		"/api/station":          "The station schedule isn't answering. Try again, or play a set from the library.",
+		"/api/dates/1977-05-08": "The show index isn't answering. Try again in a moment.",
+	} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", path, nil).WithContext(canceled))
+		if w.Code != 503 || legacyError(w) != want {
+			t.Fatal("legacy unavailable wording", path, w.Code, w.Body.String())
+		}
+	}
+
 	inventoryRows := []json.RawMessage{}
 	for _, id := range []string{"first", "future"} {
 		row := map[string]any{"id": id, "show_date": "1977-05-08", "date_text": "1977-05-08", "artist": "Fixture artist", "venue": "Fixture venue", "location": "Fixture location", "title": "Synthetic continuous recording", "kind": "synthetic", "source": "Generated tone", "lineage": "Retained fixture lineage", "taper": "Fixture generator", "transferer": "Fixture transfer", "downloads": 1, "avg_rating": 5, "num_reviews": 1, "item_size": len(continuous), "added_at": now, "tracks": r.Tracks, "songs": "First Second", "duration": r.Duration, "warnings": []string{}, "summary": map[string]any{}, "snapshot_sha256": snapshot, "observed_at": now, "updated_at": now}
@@ -194,8 +238,8 @@ func TestContinuousAudioRightsAndStationIntegration(t *testing.T) {
 	if w := get("/api/audio/first", map[string]string{"Range": "bytes=0-43"}); w.Code != 503 {
 		t.Fatal("changed derivative served from earlier verification", w.Code)
 	}
-	if w := get("/api/station", nil); w.Code != 503 {
-		t.Fatal("station accepted changed derivative", w.Code)
+	if w := get("/api/station", nil); w.Code != 503 || legacyError(w) != offAir {
+		t.Fatal("station accepted changed derivative", w.Code, w.Body.String())
 	}
 	if err = os.WriteFile(filepath.Join(derived, "continuous.wav"), continuous, 0600); err != nil {
 		t.Fatal(err)
@@ -247,7 +291,7 @@ func TestContinuousAudioRightsAndStationIntegration(t *testing.T) {
 	if err = db.ReviewTransport(ctx, "future", rep.ID, c.ID, review, approval); err != nil {
 		t.Fatal(err)
 	}
-	if w := get("/api/station", nil); w.Code != 503 {
+	if w := get("/api/station", nil); w.Code != 503 || legacyError(w) != offAir {
 		t.Fatal("legacy station ignored future withdrawal", w.Code, w.Body.String())
 	}
 	w = get("/api/audio/channel", nil)
@@ -265,8 +309,8 @@ func TestContinuousAudioRightsAndStationIntegration(t *testing.T) {
 	if w := get("/api/audio/first", map[string]string{"If-None-Match": `"` + asset.SHA256 + `"`}); w.Code != 404 {
 		t.Fatal("legacy conditional media ignored withdrawal", w.Code)
 	}
-	if w := get("/api/recordings/first", nil); w.Code != 404 {
-		t.Fatal("legacy detail ignored withdrawal", w.Code)
+	if w := get("/api/recordings/first", nil); w.Code != 404 || legacyError(w) != "That tape isn't in the library." {
+		t.Fatal("legacy detail ignored withdrawal", w.Code, w.Body.String())
 	}
 	if w = get(base+"/media", map[string]string{"If-None-Match": `"sha256-` + asset.SHA256 + `"`}); w.Code != 404 {
 		t.Fatal("revoked conditional audio exposed", w.Code)

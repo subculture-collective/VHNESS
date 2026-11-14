@@ -2,9 +2,10 @@ package app
 
 import (
 	"fmt"
-	"git.subcult.tv/subculture-collective/vhness/internal/music"
 	"net/url"
 	"testing"
+
+	"git.subcult.tv/subculture-collective/vhness/internal/music"
 )
 
 func TestLegacyRecordingFiltersBeforePagination(t *testing.T) {
@@ -30,9 +31,18 @@ func TestLegacyRecordingFiltersBeforePagination(t *testing.T) {
 	if _, total, _, err := legacyRecordingPage(entries, query); err != nil || total != 29 {
 		t.Fatal("unknown source dates should remain without bounds", total, err)
 	}
-	for _, invalid := range []url.Values{{"year": {"77"}}, {"date_from": {"1977-02-30"}}, {"date_from": {"1977-05-09"}, "date_to": {"1977-05-08"}}, {"page": {"10001"}}} {
-		if _, _, _, err := legacyRecordingPage(entries, invalid); err == nil {
-			t.Fatal("accepted invalid audio filter", invalid)
+	// Dedhed's rack shows these messages to listeners; they keep its wording.
+	for _, invalid := range []struct {
+		query url.Values
+		want  string
+	}{
+		{url.Values{"year": {"77"}}, "Use a four-digit year and at most 200 search characters."},
+		{url.Values{"date_from": {"1977-02-30"}}, "Use complete YYYY-MM-DD date bounds."},
+		{url.Values{"date_from": {"1977-05-09"}, "date_to": {"1977-05-08"}}, "The original-date range is reversed."},
+		{url.Values{"page": {"10001"}}, "That page is past the end of the shelf."},
+	} {
+		if _, _, _, err := legacyRecordingPage(entries, invalid.query); err == nil || err.Error() != invalid.want {
+			t.Fatal("invalid audio filter wording", invalid.query, err)
 		}
 	}
 }

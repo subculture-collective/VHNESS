@@ -58,7 +58,7 @@ func (s *Server) legacyDate(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.legacyAudioEntries(r)
 	if err != nil {
-		write(w, 503, map[string]string{"error": "catalog unavailable"})
+		write(w, 503, map[string]string{"error": legacyCatalogUnavailable})
 		return
 	}
 	out := []DateItem{}

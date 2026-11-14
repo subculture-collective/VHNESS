@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -14,6 +15,18 @@ import (
 	"git.subcult.tv/subculture-collective/vhness/internal/catalog"
 	"git.subcult.tv/subculture-collective/vhness/internal/domain"
 	"git.subcult.tv/subculture-collective/vhness/internal/music"
+)
+
+// Dedhed's station panel, rack and date pages show these bodies to listeners,
+// so audio compatibility keeps its legacy backend's wording and status codes.
+const (
+	legacyCatalogUnavailable  = "The catalog isn't answering. Try again in a moment."
+	legacyScheduleUnavailable = "The station schedule isn't answering. Try again, or play a set from the library."
+	legacyOffAir              = "The station is off the air right now. Try again, or play a set from the library."
+	legacyYearOrSearch        = "Use a four-digit year and at most 200 search characters."
+	legacyDateBounds          = "Use complete YYYY-MM-DD date bounds."
+	legacyReversedRange       = "The original-date range is reversed."
+	legacyPastShelf           = "That page is past the end of the shelf."
 )
 
 // Audio compatibility adapts the retained Dedhed contract to the same scoped
@@ -74,7 +87,7 @@ func (s *Server) legacyAudioEntries(r *http.Request) (map[string]music.Entry, er
 func (s *Server) legacyRecordings(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.legacyAudioEntries(r)
 	if err != nil {
-		write(w, 503, map[string]string{"error": "catalog unavailable"})
+		write(w, 503, map[string]string{"error": legacyCatalogUnavailable})
 		return
 	}
 	if id := r.PathValue("id"); id != "" {
@@ -100,24 +113,24 @@ func legacyRecordingPage(entries map[string]music.Entry, query url.Values) ([]mu
 	venue := strings.ToLower(strings.TrimSpace(query.Get("venue")))
 	from, to := query.Get("date_from"), query.Get("date_to")
 	if len(q) > 200 || len(venue) > 200 || year != "" && (len(year) != 4 || strings.Trim(year, "0123456789") != "") {
-		return nil, 0, 0, fmt.Errorf("use a four-digit year and at most 200 search characters")
+		return nil, 0, 0, errors.New(legacyYearOrSearch)
 	}
 	for _, value := range []string{from, to} {
 		if value != "" {
 			if _, err := time.Parse("2006-01-02", value); err != nil {
-				return nil, 0, 0, fmt.Errorf("use complete YYYY-MM-DD date bounds")
+				return nil, 0, 0, errors.New(legacyDateBounds)
 			}
 		}
 	}
 	if from != "" && to != "" && from > to {
-		return nil, 0, 0, fmt.Errorf("the original-date range is reversed")
+		return nil, 0, 0, errors.New(legacyReversedRange)
 	}
 	page, _ := strconv.Atoi(query.Get("page"))
 	if page < 1 {
 		page = 1
 	}
 	if page > 10000 {
-		return nil, 0, 0, fmt.Errorf("that page is past the end of the shelf")
+		return nil, 0, 0, errors.New(legacyPastShelf)
 	}
 	items := []music.Entry{}
 	for _, e := range entries {
@@ -201,12 +214,12 @@ func (s *Server) legacyAudioMedia(w http.ResponseWriter, r *http.Request) {
 func (s *Server) legacyStation(w http.ResponseWriter, r *http.Request) {
 	c, err := s.audioCollection(r)
 	if err != nil {
-		write(w, 503, map[string]string{"error": "station unavailable"})
+		write(w, 503, map[string]string{"error": legacyScheduleUnavailable})
 		return
 	}
 	schedule, err := s.DB.AudioSchedule(r.Context(), c)
 	if err != nil || schedule.Validate() != nil {
-		write(w, 503, map[string]string{"error": "station unavailable"})
+		write(w, 503, map[string]string{"error": legacyScheduleUnavailable})
 		return
 	}
 	now := time.Now().UTC()
@@ -218,7 +231,7 @@ func (s *Server) legacyStation(w http.ResponseWriter, r *http.Request) {
 	for _, p := range schedule.Programs {
 		e, a, err := s.audioEntry(r, p.Item, p.Representation, c, domain.ScheduleAction)
 		if err != nil || p.Duration > a.Duration || e.Representation.Extension.Audio == nil || e.Representation.Extension.Audio.Recording == nil {
-			write(w, 503, map[string]string{"error": "scheduled recording unavailable"})
+			write(w, 503, map[string]string{"error": legacyOffAir})
 			return
 		}
 		recording := *e.Representation.Extension.Audio.Recording
@@ -228,7 +241,7 @@ func (s *Server) legacyStation(w http.ResponseWriter, r *http.Request) {
 		if offset >= 0 && offset < p.Duration {
 			f, err := audiomodule.Verify(&s.AudioFiles, s.Media, s.Derivatives, e, a, domain.ScheduleAction)
 			if err != nil {
-				write(w, 503, map[string]string{"error": "current recording failed integrity check"})
+				write(w, 503, map[string]string{"error": legacyOffAir})
 				return
 			}
 			f.Close()
@@ -236,7 +249,7 @@ func (s *Server) legacyStation(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := legacy.At(now, entries)
 	if err != nil {
-		write(w, 503, map[string]string{"error": "The station is off the air right now. Try again, or play a set from the library."})
+		write(w, 503, map[string]string{"error": legacyOffAir})
 		return
 	}
 	write(w, 200, state)
