@@ -45,10 +45,13 @@ jobs:
           git switch -c "$branch" origin/main
           git stash pop --quiet
           git add docs/releases
-          git -c user.name='SUBCULT Agent' -c user.email='info@subcult.tv' -c commit.gpgsign=false \
+          # Commit as the Actions bot: the main ruleset asks for an extra approval
+          # when a bot pushes a commit whose author is not a GitHub account.
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c commit.gpgsign=false \
             commit -m "release: record published receipts for ${GITHUB_SHA::12}" -m "$(git status --porcelain -- docs/releases | sed 's/^/  /')"
-          git push origin "$branch"
-          url=$(gh pr create --base main --head "$branch" --title "Record published release receipts" \
+          # A rerun replaces this job's own branch and reuses its pull request.
+          git push --force origin "$branch"
+          url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null || gh pr create --base main --head "$branch" --title "Record published release receipts" \
             --body "Receipts written by the Release receipts workflow from the artifacts Gitea Actions published for \`$GITHUB_SHA\`.")
           # Pushes and pull requests made with this token start no workflows, so
           # run the required Mirror CI check explicitly, then let it merge.
