@@ -105,6 +105,17 @@ func TestMetadataIntegration(t *testing.T) {
 	if err = d.Decide(ctx, e.ID, decision); err != nil {
 		t.Fatal(err)
 	}
+	// Listing summaries read only the instance's collections when scoped.
+	for scope, want := range map[string]int{"": 1, domain.DemocracyNow: 1, local.ID: 0} {
+		var collections []string
+		if scope != "" {
+			collections = []string{scope}
+		}
+		summaries, err := d.ScopedSummaries(ctx, collections)
+		if err != nil || len(summaries) != want {
+			t.Fatal("scoped summaries", scope, len(summaries), err)
+		}
+	}
 
 	// A reviewed selection becomes a durable draft without acquiring or publishing
 	// media, modifying the legacy video decision, or adding target membership.

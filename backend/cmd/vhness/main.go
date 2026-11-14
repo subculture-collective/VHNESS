@@ -850,7 +850,9 @@ func run() error {
 		if compatibility != "" && len(allowlist) != 1 {
 			return fmt.Errorf("compatibility API requires exactly one collection")
 		}
-		server := &http.Server{Addr: env("API_ADDR", "127.0.0.1:8080"), Handler: (&app.Server{DB: d, Community: personal, Compatibility: compatibility, Revision: os.Getenv("ARKHIV_REVISION"), Web: os.Getenv("VHNESS_WEB"), Media: os.Getenv("VHNESS_MEDIA"), Derivatives: os.Getenv("VHNESS_DERIVATIVES"), VideoDerivatives: os.Getenv("VHNESS_VIDEO_DERIVATIVES"), VideoReceipts: os.Getenv("VHNESS_VIDEO_RECEIPTS"), Collection: scope, Collections: allowlist}).Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		api := &app.Server{DB: d, Community: personal, Compatibility: compatibility, Revision: os.Getenv("ARKHIV_REVISION"), Web: os.Getenv("VHNESS_WEB"), Media: os.Getenv("VHNESS_MEDIA"), Derivatives: os.Getenv("VHNESS_DERIVATIVES"), VideoDerivatives: os.Getenv("VHNESS_VIDEO_DERIVATIVES"), VideoReceipts: os.Getenv("VHNESS_VIDEO_RECEIPTS"), Collection: scope, Collections: allowlist, SummaryTTL: 30 * time.Second}
+		api.WarmSummaries()
+		server := &http.Server{Addr: env("API_ADDR", "127.0.0.1:8080"), Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		go func() {
 			<-ctx.Done()
 			shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
