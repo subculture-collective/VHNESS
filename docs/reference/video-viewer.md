@@ -10,6 +10,14 @@ are optional; frontend markup and deployment belong to each consumer.
 collection scope. Public mode also requires the current episode publication
 review. Search and filters run before stable ordering and 24-item pagination.
 
+`serve` reads listing summaries only for its configured collections and reuses
+them for 30 seconds, starting the first load at startup. Until that first load
+finishes, a listing waits up to 10 seconds for it. An expired copy (up to
+five minutes old) is returned while one background refresh runs, so a listing
+can show a review change up to about 30 seconds late. Single-episode, playback
+and channel requests still read the database on every request, so a withdrawn
+episode cannot play while it remains in a cached listing.
+
 Listings and channel responses add optional `subjects`, `languages`, `artwork`
 and `video` fields. The `video` projection carries the original source title,
 `title_origin`, source page, snapshot hash and available selected-file format,

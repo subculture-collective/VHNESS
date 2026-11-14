@@ -22,20 +22,24 @@ import (
 )
 
 type Server struct {
-	Compatibility     string
-	Revision          string
-	DB                *catalog.DB
-	Community         *community.Server
-	Clock             func() time.Time
-	Media             string
-	Derivatives       string
-	VideoDerivatives  string
-	VideoReceipts     string
-	Web               string
-	Collection        string
-	Collections       domain.CollectionScope
+	Compatibility    string
+	Revision         string
+	DB               *catalog.DB
+	Community        *community.Server
+	Clock            func() time.Time
+	Media            string
+	Derivatives      string
+	VideoDerivatives string
+	VideoReceipts    string
+	Web              string
+	Collection       string
+	Collections      domain.CollectionScope
+	// SummaryTTL reuses episode listing summaries for this long; zero disables reuse.
+	SummaryTTL        time.Duration
 	failures          sync.Mutex
 	resolutionFailure *ResolutionFailure
+	summaryCache      summaryCache
+	loadSummaries     func(context.Context) (map[string]domain.Entry, error)
 }
 type ResolutionFailure struct {
 	ID     string    `json:"episode_id"`
@@ -211,7 +215,9 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		write(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
-	entries, err := s.DB.Summaries(r.Context())
+	wait, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), summaryColdWait)
+	defer cancel()
+	entries, err := s.summaries(wait)
 	if err != nil {
 		write(w, 503, map[string]string{"error": "catalog unavailable"})
 		return

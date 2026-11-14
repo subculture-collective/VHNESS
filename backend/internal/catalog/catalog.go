@@ -189,12 +189,12 @@ func (d *DB) Snapshot(ctx context.Context, item string, raw []byte, status int, 
 	}
 	return tx.Commit(ctx)
 }
-func (d *DB) entries(ctx context.Context, ids []string, summaries bool) (map[string]domain.Entry, error) {
+func (d *DB) entries(ctx context.Context, ids []string, summaries bool, collections []string) (map[string]domain.Entry, error) {
 	source := "e.source"
 	if summaries {
 		source = `(e.source-'files') || jsonb_build_object('files',COALESCE((SELECT jsonb_agg(f) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(e.source->'files')='array' THEN e.source->'files' ELSE '[]'::jsonb END) f WHERE f->>'name'=e.decision->>'file' OR f->>'name'=e.decision->'artwork'->>'file' OR f->>'name' IN (SELECT caption->>'file' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(e.decision->'processed_video'->'captions')='array' THEN e.decision->'processed_video'->'captions' ELSE '[]'::jsonb END) caption)),'[]'::jsonb))`
 	}
-	rows, err := d.Pool.Query(ctx, `SELECT `+source+`,e.decision,c.policy,e.source_hash,e.unavailable,e.local_path,e.local_sha256,e.local_file,e.local_snapshot,c.budget,COALESCE(s.parsed->'metadata'->'subject','null'::jsonb),COALESCE(s.parsed->'metadata'->'language','null'::jsonb) FROM episodes e JOIN collections c ON c.id=e.collection_id JOIN snapshots s ON s.sha256=e.source_hash WHERE ($1::text[] IS NULL OR e.id=ANY($1)) AND (NOT $2::boolean OR e.decision->>'published'='true' OR e.decision->'processed_video'->>'published'='true') AND (NOT $3 OR (e.decision->'processed_video' IS NULL AND EXISTS(SELECT 1 FROM episode_public_reviews p WHERE p.episode_id=e.id AND p.approved AND p.source_hash=e.source_hash AND p.file=e.decision->>'file')))`, ids, summaries, d.PublicOnly)
+	rows, err := d.Pool.Query(ctx, `SELECT `+source+`,e.decision,c.policy,e.source_hash,e.unavailable,e.local_path,e.local_sha256,e.local_file,e.local_snapshot,c.budget,COALESCE(s.parsed->'metadata'->'subject','null'::jsonb),COALESCE(s.parsed->'metadata'->'language','null'::jsonb) FROM episodes e JOIN collections c ON c.id=e.collection_id JOIN snapshots s ON s.sha256=e.source_hash WHERE ($1::text[] IS NULL OR e.id=ANY($1)) AND (NOT $2::boolean OR e.decision->>'published'='true' OR e.decision->'processed_video'->>'published'='true') AND (NOT $3 OR (e.decision->'processed_video' IS NULL AND EXISTS(SELECT 1 FROM episode_public_reviews p WHERE p.episode_id=e.id AND p.approved AND p.source_hash=e.source_hash AND p.file=e.decision->>'file'))) AND ($4::text[] IS NULL OR e.collection_id=ANY($4))`, ids, summaries, d.PublicOnly, collections)
 	if err != nil {
 		return nil, err
 	}
@@ -223,13 +223,18 @@ func (d *DB) entries(ctx context.Context, ids []string, summaries bool) (map[str
 	return out, rows.Err()
 }
 func (d *DB) Entries(ctx context.Context) (map[string]domain.Entry, error) {
-	return d.entries(ctx, nil, false)
+	return d.entries(ctx, nil, false, nil)
 }
 func (d *DB) Summaries(ctx context.Context) (map[string]domain.Entry, error) {
-	return d.entries(ctx, nil, true)
+	return d.entries(ctx, nil, true, nil)
+}
+
+// ScopedSummaries reads summaries only for the given collections; nil reads all.
+func (d *DB) ScopedSummaries(ctx context.Context, collections []string) (map[string]domain.Entry, error) {
+	return d.entries(ctx, nil, true, collections)
 }
 func (d *DB) Entry(ctx context.Context, id string) (domain.Entry, error) {
-	entries, err := d.entries(ctx, []string{id}, false)
+	entries, err := d.entries(ctx, []string{id}, false, nil)
 	if err != nil {
 		return domain.Entry{}, err
 	}
@@ -244,7 +249,7 @@ func (d *DB) ScheduleEntries(ctx context.Context, s domain.Schedule) (map[string
 	for _, p := range s.Programs {
 		ids = append(ids, p.EpisodeID)
 	}
-	return d.entries(ctx, ids, false)
+	return d.entries(ctx, ids, false, nil)
 }
 
 // Channel polling needs the current asset, not every complete file inventory
@@ -254,7 +259,7 @@ func (d *DB) CurrentEntries(ctx context.Context, s domain.Schedule, now time.Tim
 	if state.Program == nil {
 		return map[string]domain.Entry{}, nil
 	}
-	return d.entries(ctx, []string{state.Program.EpisodeID}, false)
+	return d.entries(ctx, []string{state.Program.EpisodeID}, false, nil)
 }
 
 func (d *DB) ScheduleWithinCollection(ctx context.Context, s domain.Schedule, collection string) (bool, error) {
@@ -584,7 +589,7 @@ func (d *DB) LocalEntries(ctx context.Context, id string) (map[string]domain.Ent
 	if err != nil {
 		return nil, err
 	}
-	return d.entries(ctx, ids, false)
+	return d.entries(ctx, ids, false, nil)
 }
 func (d *DB) PreservationReceipt(ctx context.Context, id string) ([]byte, error) {
 	var raw []byte
