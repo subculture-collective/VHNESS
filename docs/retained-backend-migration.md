@@ -66,6 +66,8 @@ Qualification before cutover:
 
 1. Capture fresh complete donor dumps, media manifests, source responses and table exports.
 2. Verify an independent recovery copy and restore into isolated candidate databases.
+   For print, `scripts/export_print_legacy.py --source backup` then writes the manifest,
+   table export and restore receipt from that copy ([print inputs](reference/print-migration-inputs.md#exporting-the-legacy-inputs)).
 3. Import source snapshots, catalog mappings and retained exports, then register existing
    originals/derivatives with matching integrity/recovery receipts. Import current access
    decisions and the unchanged station timeline; never acquire additional media.

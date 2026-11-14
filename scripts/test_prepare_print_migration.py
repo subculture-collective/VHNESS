@@ -43,7 +43,7 @@ class PrintMigrationTests(unittest.TestCase):
         self.restore_file = self.root / 'restore.json'
         self.catalog_file.write_text(json.dumps(self.catalog))
         dump_hash = hashlib.sha256(dump).hexdigest()
-        (self.root / 'complete.json').write_text(json.dumps({'complete': True, 'catalog_sha256': dump_hash,
+        (self.root / 'complete.json').write_text(json.dumps({'complete': True, 'source': 'backup', 'catalog_sha256': dump_hash,
             'catalog_size': len(dump), 'files': {path: asset, snapshot_path: hashlib.sha256(raw).hexdigest()}}))
         self.restore_file.write_text(json.dumps({'restore_exit_code': 0, 'dump_sha256': dump_hash,
             'table_counts': {table: len(rows) for table, rows in self.catalog.items()}}))
@@ -110,6 +110,34 @@ class PrintMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Archive differs'):
             self.run_prepare()
         self.assertFalse((self.root / 'output').exists())
+
+    def test_live_or_unrecorded_source_needs_explicit_rehearsal_flag(self):
+        path = self.root / 'complete.json'
+        receipt = json.loads(path.read_text())
+        for source in ('live', None):
+            receipt.pop('source')
+            if source:
+                receipt['source'] = source
+            path.write_text(json.dumps(receipt))
+            with self.assertRaisesRegex(ValueError, 'not an independent off-host backup'):
+                self.run_prepare()
+            self.assertFalse((self.root / 'output').exists())
+            receipt['source'] = 'backup'
+        receipt['source'] = 'live'
+        path.write_text(json.dumps(receipt))
+        plan = prepare(self.root, self.catalog_file, self.restore_file, self.root / 'output', allow_live=True)
+        self.assertEqual((plan['evidence_source'], plan['cutover_evidence']), ('live', False))
+
+    def test_backup_source_is_recorded_as_cutover_evidence(self):
+        plan = self.run_prepare()
+        self.assertEqual((plan['evidence_source'], plan['cutover_evidence']), ('backup', True))
+
+    def test_restore_receipt_from_another_source_is_rejected(self):
+        restore = json.loads(self.restore_file.read_text())
+        restore['source'] = 'live'
+        self.restore_file.write_text(json.dumps(restore))
+        with self.assertRaisesRegex(ValueError, 'different sources'):
+            self.run_prepare()
 
     def test_recovered_page_text_and_cover_keep_exact_identity(self):
         asset = self.catalog['assets'][0]['sha256']

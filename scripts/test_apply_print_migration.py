@@ -62,7 +62,7 @@ def build_fixture(root):
     }
     (root / 'export.json').write_text(json.dumps(catalog))
     dump_hash = hashlib.sha256(dump).hexdigest()
-    (root / 'complete.json').write_text(json.dumps({'complete': True, 'catalog_sha256': dump_hash, 'catalog_size': len(dump), 'files': files}))
+    (root / 'complete.json').write_text(json.dumps({'complete': True, 'source': 'backup', 'catalog_sha256': dump_hash, 'catalog_size': len(dump), 'files': files}))
     (root / 'restore.json').write_text(json.dumps({'restore_exit_code': 0, 'dump_sha256': dump_hash,
                                                    'table_counts': {t: len(rows) for t, rows in catalog.items()}}))
     prepare(root, root / 'export.json', root / 'restore.json', root / 'inputs')
