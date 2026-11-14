@@ -10,6 +10,10 @@ are optional; frontend markup and deployment belong to each consumer.
 collection scope. Public mode also requires the current episode publication
 review. Search and filters run before stable ordering and 24-item pagination.
 
+`GET /api/version` includes `community: {personal, chat}` (core 0.4.9 and
+later), true when the optional community module serves accounts and chat. The
+SDK skips the account and chat routes when they are reported off.
+
 `serve` reads listing summaries only for its configured collections and reuses
 them for 30 seconds, starting the first load at startup. Until that first load
 finishes, a listing waits up to 10 seconds for it. An expired copy (up to

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PersonalBrowserStorage } from './personal-storage.js';
+import { communityFeatures } from './community.js';
 
 export type PersonalUser = { id: string; alias: string; revision: number; moderator: boolean; audio_moderator?: boolean };
 export type Favorite = { collection: string; item: string; removed: boolean; revision: number; available: boolean };
@@ -57,6 +58,10 @@ export function usePersonal(collection: string) {
   const refresh = useCallback(async () => {
     const token = ++epoch.current;
     try {
+      if ((await communityFeatures()).personal === false) {
+        if (token === epoch.current) { setEnabled(false); setSession(null); setProfile(null); setError(''); }
+        return;
+      }
       const next = await personalRequest<BrowserSession>('/api/account/v1/session');
       if (token !== epoch.current) return;
       setEnabled(true); setSession(next);
