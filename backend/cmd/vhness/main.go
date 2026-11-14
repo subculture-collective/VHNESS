@@ -32,6 +32,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Set at build time with -ldflags "-X main.coreVersion=... -X main.revision=...".
+var (
+	coreVersion = "dev"
+	revision    = "dev"
+)
+
 func env(k, d string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
@@ -850,7 +856,7 @@ func run() error {
 		if compatibility != "" && len(allowlist) != 1 {
 			return fmt.Errorf("compatibility API requires exactly one collection")
 		}
-		api := &app.Server{DB: d, Community: personal, Compatibility: compatibility, Revision: os.Getenv("ARKHIV_REVISION"), Web: os.Getenv("VHNESS_WEB"), Media: os.Getenv("VHNESS_MEDIA"), Derivatives: os.Getenv("VHNESS_DERIVATIVES"), VideoDerivatives: os.Getenv("VHNESS_VIDEO_DERIVATIVES"), VideoReceipts: os.Getenv("VHNESS_VIDEO_RECEIPTS"), Collection: scope, Collections: allowlist, SummaryTTL: 30 * time.Second}
+		api := &app.Server{DB: d, Community: personal, Compatibility: compatibility, Version: coreVersion, Revision: revision, Web: os.Getenv("VHNESS_WEB"), Media: os.Getenv("VHNESS_MEDIA"), Derivatives: os.Getenv("VHNESS_DERIVATIVES"), VideoDerivatives: os.Getenv("VHNESS_VIDEO_DERIVATIVES"), VideoReceipts: os.Getenv("VHNESS_VIDEO_RECEIPTS"), Collection: scope, Collections: allowlist, SummaryTTL: 30 * time.Second}
 		api.WarmSummaries()
 		server := &http.Server{Addr: env("API_ADDR", "127.0.0.1:8080"), Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		go func() {

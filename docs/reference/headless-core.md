@@ -28,9 +28,12 @@ already published 0.2.2 artifacts remain unchanged.
 
 ## Plain HTTP integration
 
-Any HTTP client can begin with `GET /api/version` for API version, enabled module
-versions and the configured collection scope. Liveness is `/api/health`;
-`/api/ready` checks database readiness. Neither requires a frontend.
+Any HTTP client can begin with `GET /api/version` for API version, core release
+(`core_version`), source revision (`revision`), enabled module versions and the
+configured collection scope. Liveness is `/api/health`, which also returns
+`revision`; `/api/ready` checks database readiness. Neither requires a frontend.
+Release builds set the core version and revision through the `CORE_VERSION` and
+`SOURCE_REVISION` Docker build arguments; a build without them reports `dev`.
 
 | Capability | HTTP contract |
 | --- | --- |

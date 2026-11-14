@@ -23,7 +23,9 @@ WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -trimpath -o /out/vhness ./cmd/vhness
+ARG CORE_VERSION=dev
+ARG SOURCE_REVISION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-X main.coreVersion=${CORE_VERSION} -X main.revision=${SOURCE_REVISION}" -o /out/vhness ./cmd/vhness
 
 FROM debian:bookworm-slim AS core
 # Keep tool dependencies in separate layers for registries with bounded uploads.

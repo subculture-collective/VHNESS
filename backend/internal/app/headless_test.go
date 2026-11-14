@@ -12,7 +12,7 @@ import (
 func TestHeadlessHTTPContractWithoutFrontend(t *testing.T) {
 	// No web directory, frontend build or client package is needed. These public
 	// discovery endpoints and collection guards work before catalog access.
-	handler := (&Server{Collection: "headless-fixture"}).Handler()
+	handler := (&Server{Collection: "headless-fixture", Version: "0.4.11", Revision: "fixture-revision"}).Handler()
 	get := func(path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
@@ -23,17 +23,22 @@ func TestHeadlessHTTPContractWithoutFrontend(t *testing.T) {
 			t.Fatalf("headless route %s served frontend content: %d", path, w.Code)
 		}
 	}
-	if w := get("/api/health"); w.Code != http.StatusOK {
-		t.Fatalf("health unavailable without a frontend: %d", w.Code)
+	var health struct {
+		Revision string `json:"revision"`
+	}
+	if w := get("/api/health"); w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &health) != nil || health.Revision != "fixture-revision" {
+		t.Fatalf("health unavailable without a frontend or missing the build revision: %d %s", w.Code, w.Body.String())
 	}
 	var version struct {
 		API         string            `json:"api_version"`
+		Core        string            `json:"core_version"`
+		Revision    string            `json:"revision"`
 		Collections []string          `json:"collections"`
 		Modules     map[string]string `json:"modules"`
 		Community   map[string]bool   `json:"community"`
 	}
 	w := get("/api/version")
-	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &version) != nil || version.API != "1" {
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &version) != nil || version.API != "1" || version.Core != "0.4.11" || version.Revision != "fixture-revision" {
 		t.Fatalf("plain HTTP capability discovery failed: %s", w.Body.String())
 	}
 	for _, module := range []string{"catalog", "print", "audio", "video"} {

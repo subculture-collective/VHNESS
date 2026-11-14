@@ -85,7 +85,8 @@ jobs:
           export DOCKER_CONFIG="$release_auth_dir/docker"
           printf '%s' "$ARCHIVE_PACKAGE_TOKEN" | docker login git.subcult.tv --username "$ARCHIVE_REGISTRY_USER" --password-stdin
           release_image="git.subcult.tv/subculture-collective/archive-engine:$GITHUB_SHA"
-          docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "org.opencontainers.image.version=$release_version" -t "$release_image" .
+          core_version=$(python3 -c 'import json; print(json.load(open("docs/reference/core-version.json"))["version"])')
+          docker build --build-arg "CORE_VERSION=$core_version" --build-arg "SOURCE_REVISION=$GITHUB_SHA" --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "org.opencontainers.image.version=$release_version" -t "$release_image" .
           docker push "$release_image"
           engine_digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$release_image")
           python3 scripts/release_manifest.py --package ".artifacts/subcult-archive-viewer-$release_version.tgz" --engine-digest "$engine_digest" --output ".artifacts/release-$release_version.json"

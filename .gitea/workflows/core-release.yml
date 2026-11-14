@@ -111,7 +111,7 @@ jobs:
           else
             test -z "$CORE_RECOVERY_SOURCE"
             core_image="git.subcult.tv/subculture-collective/archive-core:$core_source"
-            docker build --target core --label "org.opencontainers.image.revision=$core_source" --label "org.opencontainers.image.version=$core_version" --label org.subcult.archive-artifact=core -t "$core_image" .
+            docker build --target core --build-arg "CORE_VERSION=$core_version" --build-arg "SOURCE_REVISION=$core_source" --label "org.opencontainers.image.revision=$core_source" --label "org.opencontainers.image.version=$core_version" --label org.subcult.archive-artifact=core -t "$core_image" .
           fi
           test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$core_image")" = "$core_source"
           test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$core_image")" = "$core_version"
