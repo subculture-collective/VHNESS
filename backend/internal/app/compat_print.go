@@ -53,7 +53,7 @@ func (s *Server) legacyDocuments(w http.ResponseWriter, r *http.Request) {
 		write(w, 400, map[string]string{"error": "invalid document filter"})
 		return
 	}
-	filter := catalog.PrintBrowseFilters{Creator: q.Get("creator"), DateFrom: q.Get("date_from"), DateTo: q.Get("date_to")}
+	filter := catalog.PrintBrowseFilters{Creator: q.Get("creator"), DateFrom: q.Get("date_from"), DateTo: q.Get("date_to"), Series: q.Get("series")}
 	if err := filter.Validate(); err != nil {
 		write(w, 400, map[string]string{"error": err.Error()})
 		return
@@ -79,7 +79,12 @@ func (s *Server) legacyFacets(w http.ResponseWriter, r *http.Request) {
 		write(w, 503, map[string]string{"error": "catalog unavailable"})
 		return
 	}
-	write(w, 200, map[string]any{"subjects": facets})
+	series, err := s.DB.LegacyPrintSeries(r.Context(), s.configuredCollection())
+	if err != nil {
+		write(w, 503, map[string]string{"error": "catalog unavailable"})
+		return
+	}
+	write(w, 200, map[string]any{"subjects": facets, "series": series})
 }
 func (s *Server) legacyPrintMapping(r *http.Request) bool {
 	var item, rep string

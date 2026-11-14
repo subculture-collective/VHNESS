@@ -3,12 +3,17 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
 
 // LabelKinds are the typed vocabularies a catalog label can belong to.
-var LabelKinds = map[string]bool{"topic": true, "place": true, "organization": true, "person": true, "event": true}
+var LabelKinds = map[string]bool{"topic": true, "place": true, "organization": true, "person": true, "event": true, SeriesKind: true}
+
+// SeriesKind labels an ordered series. Its assignments carry an issue
+// position and an issue label; assignments of other kinds carry neither.
+const SeriesKind = "series"
 
 var labelID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)
 
@@ -43,11 +48,18 @@ type LabelProposal struct {
 	Method   string          `json:"method"`
 	Score    float64         `json:"score"`
 	Evidence json.RawMessage `json:"evidence"`
+	// IssuePosition and IssueLabel are required for a series label and
+	// forbidden for every other kind. Position orders the series' items.
+	IssuePosition *int   `json:"issue_position,omitempty"`
+	IssueLabel    string `json:"issue_label,omitempty"`
 }
 
 func (p LabelProposal) Validate() error {
 	if !ValidID(p.Item) || !ValidLabelID(p.Label) || strings.TrimSpace(p.Method) == "" || len(p.Method) > 200 || p.Score < 0 || p.Score > 1e6 {
 		return fmt.Errorf("invalid label proposal for %q", p.Item)
+	}
+	if p.IssuePosition == nil && p.IssueLabel != "" || p.IssuePosition != nil && (*p.IssuePosition < 0 || *p.IssuePosition > math.MaxInt32 || strings.TrimSpace(p.IssueLabel) == "" || len(p.IssueLabel) > 200) {
+		return fmt.Errorf("invalid issue position or label for %q", p.Item)
 	}
 	if len(p.Evidence) > 0 && (!json.Valid(p.Evidence) || len(p.Evidence) > 64<<10) {
 		return fmt.Errorf("invalid label evidence for %q", p.Item)
@@ -69,11 +81,22 @@ func (d LabelDecision) Validate() error {
 	return nil
 }
 
-// ItemLabel is an accepted label as shown on a catalog item.
+// CheckKind reports whether the proposal's issue fields match the label kind.
+func (p LabelProposal) CheckKind(kind string) error {
+	if (kind == SeriesKind) != (p.IssuePosition != nil) {
+		return fmt.Errorf("label %q: a series assignment requires an issue position and label; other kinds take neither", p.Label)
+	}
+	return nil
+}
+
+// ItemLabel is an accepted label as shown on a catalog item. Series labels
+// include the item's issue position and issue label.
 type ItemLabel struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Label string `json:"label"`
+	ID            string `json:"id"`
+	Kind          string `json:"kind"`
+	Label         string `json:"label"`
+	IssuePosition *int   `json:"issue_position,omitempty"`
+	IssueLabel    string `json:"issue_label,omitempty"`
 }
 
 // TextHit is a matching page from archive-wide text search.

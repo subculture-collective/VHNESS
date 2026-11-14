@@ -154,7 +154,7 @@ func TestPublicPublicationIntegration(t *testing.T) {
 	if w := get("/api/documents?q=solidarity"); w.Code != 200 || !strings.Contains(w.Body.String(), `"total":1`) || strings.Contains(w.Body.String(), "operator-only") || strings.Contains(w.Body.String(), "Private operator note") {
 		t.Fatal("retained metadata/OCR search", w.Code, w.Body.String())
 	}
-	if w := get("/api/facets"); w.Code != 200 || w.Body.String() != "{\"subjects\":[\"print\"]}\n" {
+	if w := get("/api/facets"); w.Code != 200 || w.Body.String() != "{\"series\":[],\"subjects\":[\"print\"]}\n" {
 		t.Fatal("compatibility facets", w.Code, w.Body.String())
 	}
 	if w := get("/api/documents/print"); w.Code != 200 || !strings.Contains(w.Body.String(), "unknown-rights") || !strings.Contains(w.Body.String(), `"pages":1`) {
@@ -318,6 +318,62 @@ func TestPublicPublicationIntegration(t *testing.T) {
 	}
 	if server.communityAvailable(ctx, c.ID, "catalog:"+item.ID) {
 		t.Fatal("stale public item remained available for favorites")
+	}
+	// An accepted series lists its public issues in issue order on both APIs.
+	if err = operator.ImportLabels(ctx, []domain.Label{{ID: "riot", Kind: domain.SeriesKind, Label: "Riot Grrrl"}}); err != nil {
+		t.Fatal(err)
+	}
+	issues := []string{"filter-05", "filter-02", "filter-09"}
+	var proposals []domain.LabelProposal
+	var decisions []domain.LabelDecision
+	for i, id := range issues {
+		position := i + 1
+		proposals = append(proposals, domain.LabelProposal{Item: id, Label: "riot", Method: "editor", IssuePosition: &position, IssueLabel: fmt.Sprintf("Volume %d", position)})
+		decisions = append(decisions, domain.LabelDecision{Item: id, Label: "riot", State: "accepted"})
+	}
+	if _, err = operator.ProposeLabels(ctx, proposals, "Synthetic series"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = operator.ReviewLabels(ctx, decisions, "Synthetic series review"); err != nil {
+		t.Fatal(err)
+	}
+	server.Compatibility = ""
+	w = get("/api/catalog/v1/items?label=riot")
+	if err := json.Unmarshal(w.Body.Bytes(), &filtered); err != nil || w.Code != 200 || filtered.Total != 3 {
+		t.Fatal("series catalog filter", w.Code, w.Body.String())
+	}
+	for i, id := range issues {
+		got := filtered.Items[i]
+		if got.ID != id || len(got.Labels) != 1 || got.Labels[0].IssueLabel != fmt.Sprintf("Volume %d", i+1) || got.Labels[0].IssuePosition == nil || *got.Labels[0].IssuePosition != i+1 {
+			t.Fatal("series catalog issue order", i, got)
+		}
+	}
+	server.Compatibility = "print"
+	w = get("/api/documents?series=riot")
+	var seriesDocs struct {
+		Total     int `json:"total"`
+		Documents []struct {
+			ID     string `json:"id"`
+			Series []struct {
+				Slug       string `json:"slug"`
+				IssueLabel string `json:"issue_label"`
+			} `json:"series"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &seriesDocs); err != nil || w.Code != 200 || seriesDocs.Total != 3 {
+		t.Fatal("compatibility series filter", w.Code, w.Body.String())
+	}
+	for i, id := range issues {
+		got := seriesDocs.Documents[i]
+		if got.ID != id || len(got.Series) != 1 || got.Series[0].Slug != "riot" || got.Series[0].IssueLabel != fmt.Sprintf("Volume %d", i+1) {
+			t.Fatal("compatibility series issue order", i, got)
+		}
+	}
+	if w := get("/api/documents?series=Not%20A%20Slug"); w.Code != 400 {
+		t.Fatal("invalid series accepted", w.Code)
+	}
+	if w := get("/api/facets"); w.Code != 200 || !strings.Contains(w.Body.String(), `"series":[{"slug":"riot","name":"Riot Grrrl"}]`) {
+		t.Fatal("compatibility series facets", w.Code, w.Body.String())
 	}
 
 }
