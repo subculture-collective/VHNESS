@@ -1,3 +1,22 @@
+## 0.4.9
+
+`PrintReader` gains an opt-in reading layout. Existing consumers see no change.
+
+- `pageArrows`: previous/next arrows beside the page, the toolbar after the page
+  in the markup, ←/→ and Page Up/Down turn pages (←/→ pan a zoomed page that is
+  wider than its box), and a sideways swipe turns pages at the whole-page fit.
+- `fitPage`: a "Whole page" zoom, selected first. The reader sets
+  `--print-page-ratio` (height / width of the current page) and
+  `--print-page-top` (the page box's distance from the top of the document) so
+  consumer CSS can fit the page into the screen.
+- `fullscreen`: a full-screen toggle (also the F key). Where the Fullscreen API
+  is missing or refused, the reader becomes a fixed overlay that Escape closes.
+- `searchToggle`: search and the page's readable text open from one
+  "Search & text" toolbar button as a panel under the page.
+
+Page images now render at the screen's pixel density. `printPageScale()` is
+exported for consumers that size pages themselves.
+
 ## 0.4.8
 
 `usePersonal` and the chat hooks read `community` from `/api/version` once per
