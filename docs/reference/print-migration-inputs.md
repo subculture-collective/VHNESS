@@ -95,6 +95,16 @@ twice through the real commands, checks that the second run leaves every table
 unchanged, and reads the collection and documents back from the compatibility
 API.
 
+For a collection whose legacy documents were public through an automatic
+collection policy, record the owner's decision after indexing with
+`review-public-collection --approve-public` (see
+[public core](public-core.md#automatic-collection-access)). It publishes the
+retained private reading reviews that qualify. Approvals kept with
+`--retain-public-approvals` stay manual. A variant whose legacy public
+approval was revoked while its document stayed published also receives a private
+reading input, so record its private review again after the automatic decision.
+That review is the core's explicit withdrawal.
+
 Generated inputs are a preparation artifact. Qualify actual catalog coverage,
 PDF reading/search, original-download hashes, an independent common database
 restore and a rollback to the retained legacy app before any cutover decision.
