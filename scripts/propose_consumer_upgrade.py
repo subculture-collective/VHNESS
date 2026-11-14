@@ -60,6 +60,9 @@ def proposal(release, consumer, clone, artifact, request=api, base_ref=None, aut
     repository = github_repository(consumer)
     base = '/repos/' + repository
     metadata = request(base)
+    if metadata.get('archived'):
+        print(repository, 'is archived; no proposal', flush=True)
+        return None
     if not metadata.get('permissions', {}).get('push'):
         raise ValueError('The upgrade token cannot push to ' + repository)
     target = base_ref or metadata['default_branch']
@@ -83,7 +86,7 @@ def proposal(release, consumer, clone, artifact, request=api, base_ref=None, aut
     if consumer.get('mode', 'platform') == 'platform':
         files.append(consumer['engine_file'])
     subprocess.run(['git', 'add', '--', *files], cwd=clone, check=True)
-    title = 'Upgrade shared archive ' + ('viewer' if viewer_only else 'platform') + ' to ' + release['version']
+    title = 'Upgrade shared archive ' + ('core' if api_only else 'viewer' if viewer_only else 'platform') + ' to ' + release['version']
     subprocess.run(['git', '-c', 'user.name=SUBCULT Agent', '-c', 'user.email=info@subcult.tv', '-c', 'commit.gpgsign=false',
                     'commit', '-m', title], cwd=clone, check=True)
     subprocess.run(['git', 'push', 'origin', branch], cwd=clone, check=True)
