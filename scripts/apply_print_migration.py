@@ -272,18 +272,20 @@ LIBPQ = {'host': 'PGHOST', 'hostaddr': 'PGHOSTADDR', 'port': 'PGPORT', 'dbname':
          'application_name': 'PGAPPNAME', 'options': 'PGOPTIONS', 'target_session_attrs': 'PGTARGETSESSIONATTRS'}
 
 
-KEYWORD = re.compile(r"\s*([A-Za-z_]+)\s*=\s*('(?:[^'\\]|\\.)*'|[^\s']+)\s*")
+KEYWORD = re.compile(r"\s*([A-Za-z_]+)\s*=\s*('(?:[^'\\]|\\.)*'|(?:[^\s'\\]|\\.)+)\s*")
 
 
 def keyword_settings(dsn):
-    """Parse a libpq keyword connection string: key=value pairs, values optionally single-quoted."""
+    """Parse a libpq keyword connection string: key=value pairs, values optionally single-quoted.
+
+    As in libpq, a backslash escapes the next character in quoted and unquoted values."""
     settings, position = {}, 0
     while position < len(dsn):
         match = KEYWORD.match(dsn, position)
         if not match:
             raise ApplyError('Unsupported database connection string format')
         value = match.group(2)
-        settings[match.group(1)] = re.sub(r'\\(.)', r'\1', value[1:-1]) if value.startswith("'") else value
+        settings[match.group(1)] = re.sub(r'\\(.)', r'\1', value[1:-1] if value.startswith("'") else value)
         position = match.end()
     return settings
 
@@ -291,7 +293,8 @@ def keyword_settings(dsn):
 def libpq_env(environ):
     """Translate DATABASE_URL (or DATABASE_URL_FILE) into libpq variables, keeping it off the command line.
 
-    Raises ApplyError for a setting psql cannot receive this way, before any command runs."""
+    Settings the connection string omits keep their inherited PG* values, as they do for
+    vhness. Raises ApplyError for a setting psql cannot receive this way, before any command runs."""
     env = dict(environ)
     url = environ.get('DATABASE_URL', '')
     if environ.get('DATABASE_URL_FILE'):
@@ -311,8 +314,6 @@ def libpq_env(environ):
     unknown = sorted(set(settings) - set(LIBPQ))
     if unknown:
         raise ApplyError('Unsupported database connection setting: ' + ', '.join(unknown))
-    for name in LIBPQ.values():
-        env.pop(name, None)
     env.update((LIBPQ[k], v) for k, v in settings.items())
     return env
 
