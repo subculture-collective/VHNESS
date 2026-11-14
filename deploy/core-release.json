@@ -26,9 +26,9 @@
   "schema_strategy": "checksum-locked-additive-migrations",
   "compatibility_window": "current and previous reviewed release",
   "rollout": "reviewed-per-consumer",
-  "version": "0.4.7",
-  "engine_digest": "git.subcult.tv/subculture-collective/archive-core@sha256:8673066ce786242d276911a3d1d64e897159efb698b6ce2960ae4a5d6b49e20d",
-  "source_revision": "f236de25cd32906bf68f6e69255e630376e59019",
+  "version": "0.4.9",
+  "engine_digest": "git.subcult.tv/subculture-collective/archive-core@sha256:8e61bd1e05c6510824871824b714b2d213b32c1889b08b45116bf55f80fd3189",
+  "source_revision": "df7d836c9c9b3a30de3ba110fe8bec2a89637cf7",
   "optional_migrations": {
     "community/0001_personal_chat.sql": "718cc0d07c225d3743c2890bded533bf82fb4866a23b94932faf88c56a619c32",
     "community/0002_media_rooms.sql": "1816b036ed8fdd9fa2c6e5a608b836eabfaea9677e57e33df351e7ab708f7990"
@@ -52,6 +52,9 @@
     "0016_source_catalog_exclusions.sql": "5c38ac16f3230d077cbd9bc34fe21d6201f27767a3d7b7ee6ed67095379bbe3e",
     "0017_source_discovery.sql": "d3fc8c7376ab065bcaa251069f4f7f9d0c56bd635c4b90e10c0a719fe4b20ffd",
     "0018_source_artist_media.sql": "e196db61453fff53c5e746200386beca72bbe3e5df8e4baa5bc966bbc9cefe3b",
-    "0019_catalog_labels.sql": "2fb0380c3fb587de14251b94ccab6a6da43a101e03704ba7f0f1383ce589fa3a"
+    "0019_catalog_labels.sql": "2fb0380c3fb587de14251b94ccab6a6da43a101e03704ba7f0f1383ce589fa3a",
+    "0020_source_catalog_sample.sql": "65176d634943a0454324f4500d683fa9f615142895c6b5cc013fab86a83d7c4d",
+    "0021_source_type_classification.sql": "8838dcd3af040d0a9cd08a28b21a1929524bd81cd739ea51f39bf8959a603e81",
+    "0022_source_popularity.sql": "9ab04bbd78df0fecccfb7d509403a60d1931a03bc805f57659a7f4a9938f98ae"
   }
 }
