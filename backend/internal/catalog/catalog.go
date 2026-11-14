@@ -34,12 +34,34 @@ func Open(ctx context.Context, url string) (*DB, error) {
 	}
 	return &DB{Pool: p}, nil
 }
+
+// Migrate applies pending migrations without changing any role's privileges.
 func (d *DB) Migrate(ctx context.Context, dir string) error {
+	return d.MigrateGranting(ctx, dir, "")
+}
+
+// MigrateGranting applies pending migrations and then, when reader is not
+// empty, grants that existing role USAGE on the migration schema (public in
+// deployments) and SELECT on every table and view in it, including tables the
+// run created. An empty reader behaves exactly like Migrate.
+func (d *DB) MigrateGranting(ctx context.Context, dir, reader string) error {
+	if reader != "" && (len(reader) > 63 || strings.ContainsRune(reader, 0) || strings.TrimSpace(reader) != reader) {
+		return fmt.Errorf("reader role name is invalid")
+	}
 	c, err := d.Pool.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Release()
+	if reader != "" {
+		var exists bool
+		if err = c.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, reader).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("reader role %q does not exist", reader)
+		}
+	}
 	if _, err = c.Exec(ctx, `SELECT pg_advisory_lock(79202173)`); err != nil {
 		return err
 	}
@@ -89,7 +111,16 @@ func (d *DB) Migrate(ctx context.Context, dir string) error {
 			return err
 		}
 	}
-	return nil
+	if reader == "" {
+		return nil
+	}
+	var schema string
+	if err = c.QueryRow(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
+		return err
+	}
+	schemaSQL, readerSQL := pgx.Identifier{schema}.Sanitize(), pgx.Identifier{reader}.Sanitize()
+	_, err = c.Exec(ctx, "GRANT USAGE ON SCHEMA "+schemaSQL+" TO "+readerSQL+"; GRANT SELECT ON ALL TABLES IN SCHEMA "+schemaSQL+" TO "+readerSQL)
+	return err
 }
 func (d *DB) Collection(ctx context.Context, c domain.Collection) error {
 	if err := c.Validate(); err != nil {

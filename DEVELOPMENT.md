@@ -25,6 +25,8 @@ restore, hosted CI, and complete pilot qualification require separate receipts.
 
 The CLI requires `DATABASE_URL`. Run it under `backend/`; migration paths default
 to `../migrations`. `VHNESS_MIGRATIONS` can select the explicit migration directory.
+`ARKHIV_READER_ROLE` names an existing read-only role that `migrate` grants SELECT
+on every table in the migration schema.
 
 ```sh
 go run ./cmd/vhness migrate

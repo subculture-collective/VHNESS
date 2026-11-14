@@ -20,7 +20,10 @@ decisions: [plan 0006](../plans/0006-automated-update-and-deploy.md).
    and derives brand frontends that must proxy a differently named core
    (`democracy-core`, `bill-core`) from the consumer image.
 3. If a core or API image changes, it runs the configured backup first, then
-   each core's `migrate` with the private operator credential.
+   each core's `migrate` with the private operator credential. With
+   `ARKHIV_READER_ROLE` set on that command, `migrate` grants the public role
+   SELECT on every table, including new ones; see
+   [public core](../reference/public-core.md).
 4. Each changed service is swapped through a compose overlay that changes only
    the image: configuration equivalence is checked with `compose config`,
    `up --wait` runs for that one service, the new container must keep the old

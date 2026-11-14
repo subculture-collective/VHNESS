@@ -436,7 +436,7 @@ func run() error {
 	case "review-public-video":
 		return d.ReviewPublicVideo(ctx, *id, *approvePublic, *notes)
 	case "migrate":
-		return d.Migrate(ctx, env("VHNESS_MIGRATIONS", "../migrations"))
+		return d.MigrateGranting(ctx, env("VHNESS_MIGRATIONS", "../migrations"), os.Getenv("ARKHIV_READER_ROLE"))
 	case "collection":
 		return d.Collection(ctx, domain.Collection{ID: *collection, Policy: domain.Policy(*policy), Budget: *budget, Reserve: *reserve, SourceItem: *sourceItem})
 	case "review-budget":
