@@ -224,6 +224,13 @@ class UpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'cannot push'):
             proposal(self.release, self.consumer, self.root, self.artifact, request)
 
+    def test_archived_consumer_gets_no_proposal(self):
+        self.consumer['repository'] = 'subculture-collective/example'
+        def request(path, method='GET', payload=None):
+            self.assertEqual(method, 'GET')
+            return {'default_branch': 'main', 'archived': True, 'permissions': {'push': False}}
+        self.assertIsNone(proposal(self.release, self.consumer, self.root, self.artifact, request))
+
     def test_registry_github_name_overrides_an_older_gitea_path(self):
         from propose_consumer_upgrade import github_repository
         self.assertEqual(github_repository({'repository': 'PatrickFanella/arkhiv-live-music', 'github_repository': 'subculture-collective/lineage'}), 'subculture-collective/lineage')
