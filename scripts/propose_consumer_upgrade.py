@@ -15,30 +15,30 @@ from upgrade_consumer import prepare, validate, select_consumer
 from viewer_release import retained_core
 
 
+def github_repository(consumer):
+    """GitHub is the source for every consumer; a few registry names are older Gitea paths."""
+    return consumer.get('github_repository', consumer['repository'])
+
+
 def api(path, method='GET', payload=None):
     token = os.environ['ARCHIVE_UPGRADE_TOKEN']
-    request = urllib.request.Request('https://git.subcult.tv/api/v1' + path,
+    request = urllib.request.Request('https://api.github.com' + path,
         method=method, data=json.dumps(payload).encode() if payload is not None else None,
-        headers={'Authorization': 'token ' + token, 'Content-Type': 'application/json', 'User-Agent': 'tea'})
+        headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json',
+                 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json', 'User-Agent': 'arkhiv-consumer-upgrades'})
     with urllib.request.urlopen(request, timeout=30) as response:
         raw = response.read()
         return json.loads(raw) if raw else None
 
 
 def existing_proposal(base, target, branch, consumer, release, request):
-    pulls = []
-    page = 1
-    while True:
-        batch = request(base + '/pulls?state=all&limit=50&page=' + str(page))
-        pulls.extend(batch)
-        if len(batch) < 50:
-            break
-        page += 1
+    owner = base.split('/')[2]
+    pulls = request(base + '/pulls?state=all&per_page=100&head=' + urllib.parse.quote(owner + ':' + branch, safe=':'))
     for pull in pulls:
         if pull['head']['ref'] == branch:
             if pull['base']['ref'] != target:
                 raise ValueError('Existing proposal targets a different base')
-            if pull['state'] == 'closed' and not pull.get('merged'):
+            if pull['state'] == 'closed' and not (pull.get('merged') or pull.get('merged_at')):
                 raise ValueError('Upgrade was declined; do not reopen automatically')
             content = request(base + '/contents/' + consumer['release_file'] + '?ref=' + urllib.parse.quote(branch, safe=''))
             proposed = json.loads(base64.b64decode(content['content']))
@@ -49,27 +49,19 @@ def existing_proposal(base, target, branch, consumer, release, request):
 
 
 def schedule_merge(request, base, url):
-    """Ask Gitea to merge the proposal once its required checks pass. Branch protection on the consumer holds the merge until verify is green."""
-    number = url.rstrip('/').rsplit('/', 1)[-1]
-    if not number.isdigit():
-        raise ValueError('Proposal URL does not name a pull request number')
-    try:
-        request(base + '/pulls/' + number + '/merge', 'POST', {'do': 'merge', 'merge_when_checks_succeed': True, 'delete_branch_after_merge': True})
-    except urllib.error.HTTPError as error:
-        # 405: not mergeable yet (conflict or failed check); 409/423: already merged, scheduled or locked.
-        if error.code not in (405, 409, 423):
-            raise
-        print(url, 'left for review: merge request answered HTTP', error.code, flush=True)
-        return False
+    """Consumer repositories merge a ready pull request themselves once their required
+    checks pass (their auto-merge workflow or the owner's merge timer), so nothing is
+    requested here; a failed check leaves the pull request open for review."""
+    print(url, 'merges once its required checks pass', flush=True)
     return True
 
 
 def proposal(release, consumer, clone, artifact, request=api, base_ref=None, auto_merge=False):
-    if request('/user')['login'] != 'subcult-agent':
-        raise ValueError('Upgrade proposals require the subcult-agent identity')
-    repository = consumer['repository']
+    repository = github_repository(consumer)
     base = '/repos/' + repository
     metadata = request(base)
+    if not metadata.get('permissions', {}).get('push'):
+        raise ValueError('The upgrade token cannot push to ' + repository)
     target = base_ref or metadata['default_branch']
     api_only = consumer.get('mode') == 'api'
     viewer_only = consumer.get('mode') == 'viewer'
@@ -144,7 +136,7 @@ def main():
         subprocess.run(['git', 'check-ref-format', '--branch', args.base_ref], check=True, stdout=subprocess.DEVNULL)
     with tempfile.TemporaryDirectory(prefix='archive-upgrade-') as work:
         clone = Path(work) / 'consumer'
-        subprocess.run(['git', 'clone', '--quiet', 'https://git.subcult.tv/' + consumer['repository'] + '.git', str(clone)], check=True)
+        subprocess.run(['git', 'clone', '--quiet', 'https://github.com/' + github_repository(consumer) + '.git', str(clone)], check=True)
         if args.base_ref:
             subprocess.run(['git', 'switch', '--detach', 'origin/' + args.base_ref], cwd=clone, check=True)
         print(proposal(release, consumer, clone, args.package_artifact.resolve() if args.package_artifact else None, base_ref=args.base_ref, auto_merge=args.auto_merge) or 'Release already applied; no PR')

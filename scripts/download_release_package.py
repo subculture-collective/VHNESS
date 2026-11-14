@@ -20,11 +20,11 @@ class RegistryRedirect(urllib.request.HTTPRedirectHandler):
 def download(release, output):
     if release['registry'] != REGISTRY or release['package'] != '@subcult/archive-viewer':
         raise ValueError('Unregistered package registry')
-    token = os.environ['ARCHIVE_PACKAGE_READ_TOKEN']
+    token = os.environ.get('ARCHIVE_PACKAGE_READ_TOKEN', '')
     def get(url, maximum):
         if not url.startswith(REGISTRY):
             raise ValueError('Package download changed registry ownership')
-        request = urllib.request.Request(url, headers={'Authorization': 'token ' + token, 'User-Agent': 'tea'})
+        request = urllib.request.Request(url, headers={'User-Agent': 'tea', **({'Authorization': 'token ' + token} if token else {})})
         with urllib.request.build_opener(RegistryRedirect()).open(request, timeout=30) as response:
             if not response.url.startswith(REGISTRY):
                 raise ValueError('Package download redirected outside its registry')

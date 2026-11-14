@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from download_release_package import download
-from propose_consumer_upgrade import proposal
+from propose_consumer_upgrade import github_repository, proposal
 
 
 
@@ -70,7 +70,7 @@ def main():
                     continue
                 base_ref = consumer['adoption_ref']
             clone = work / consumer['repository'].replace('/', '__')
-            subprocess.run(['git', 'clone', '--quiet', 'https://git.subcult.tv/' + consumer['repository'] + '.git', str(clone)], check=True)
+            subprocess.run(['git', 'clone', '--quiet', 'https://github.com/' + github_repository(consumer) + '.git', str(clone)], check=True)
             if base_ref:
                 subprocess.run(['git', 'switch', '--detach', 'origin/' + base_ref], cwd=clone, check=True)
                 revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=clone, text=True).strip()

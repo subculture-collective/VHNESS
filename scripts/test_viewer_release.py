@@ -132,7 +132,7 @@ class ViewerUpgradeTests(unittest.TestCase):
                 return [] if not posts else [{'head': {'ref': branch}, 'base': {'ref': 'main'}, 'state': 'open', 'html_url': 'https://git.subcult.tv/example/pulls/1'}]
             if '/contents/' in path:
                 return {'content': base64.b64encode(json.dumps(self.release).encode()).decode()}
-            return {'default_branch': 'main'}
+            return {'default_branch': 'main', 'permissions': {'push': True}}
         with mock.patch('propose_consumer_upgrade.prepare'), mock.patch('propose_consumer_upgrade.subprocess.run') as run:
             for _ in range(2):
                 self.assertEqual(proposal(self.release, self.consumer, self.root, self.artifact, request), 'https://git.subcult.tv/example/pulls/1')

@@ -251,8 +251,8 @@
           "scripts/check_core_pin.py"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/core-release-012",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/bill-nye-tv/pulls/5",
       "adoption_revision": "9c24baa59212cc25848cd3564342063b37e5497c"
     },
@@ -276,8 +276,8 @@
           "scripts/check_core_pin.py"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/core-release-012",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/democracy-now-tv/pulls/6",
       "adoption_revision": "156962b448f486afbda9dc633793be495e077b49"
     },
@@ -301,8 +301,8 @@
           "verify"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/independent-core-release",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_revision": "958b14c0fea5eae2633e93da36a4a53029704858",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/arkhiv-alpha/pulls/62",
       "previous_repository": "subculture-collective/arkhiv-alpha"
@@ -327,8 +327,8 @@
           "verify"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/independent-core-release",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_revision": "e9b1bbf2aaec1a6ca7111b8ecb975a9c30ee1360",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/arkhiv-riot-grrrl/pulls/13"
     },
@@ -352,8 +352,8 @@
           "verify"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/independent-core-release",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_revision": "1b783e77a98c49b3b9404a4ed6c2e9c579df40ee",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/dedhed/pulls/32"
     },
@@ -377,8 +377,8 @@
           "verify"
         ]
       ],
-      "adoption_status": "pull-request",
-      "adoption_ref": "feat/core-release-012",
+      "adoption_status": "merged",
+      "adoption_ref": "main",
       "adoption_revision": "ea480f4fde4ff903ab9575cc8a4a50e229365bd6",
       "adoption_pull_request": "https://git.subcult.tv/subculture-collective/video-archive-template/pulls/5"
     },
@@ -410,7 +410,8 @@
         "audio": "1",
         "source_catalog": "1"
       },
-      "merge_revision": "c8355b3cb72f0ccd6d88b70fb5fbf60331cfef25"
+      "merge_revision": "c8355b3cb72f0ccd6d88b70fb5fbf60331cfef25",
+      "github_repository": "subculture-collective/lineage"
     },
     {
       "repository": "PatrickFanella/arkhiv-live-music",
@@ -440,7 +441,8 @@
         "source_artist_photos": "1",
         "source_artist_media": "1"
       },
-      "merge_revision": "a9ee2892f2a52c0ffa15f0681d1d73ef6a1f2891"
+      "merge_revision": "a9ee2892f2a52c0ffa15f0681d1d73ef6a1f2891",
+      "github_repository": "subculture-collective/lineage"
     },
     {
       "repository": "subculture-collective/chicago-labor-archive",

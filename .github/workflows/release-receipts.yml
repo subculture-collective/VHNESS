@@ -40,6 +40,7 @@ jobs:
             echo "Receipts already committed."
             exit 0
           fi
+          added=$(git status --porcelain -- docs/releases | awk '{print $2}')
           branch="release/receipts-${GITHUB_SHA::12}"
           git fetch --quiet origin main
           git stash push --include-untracked --quiet -- docs/releases
@@ -74,3 +75,20 @@ jobs:
             -f 'output[title]=Mirror CI passed' -f "output[summary]=Dispatched Mirror CI run $run_id passed on $head." > /dev/null
           gh pr merge --auto --squash "$url"
           echo "$url"
+          # Propose the new releases to the consumers once the receipt merges. A
+          # merge made through this token starts no push workflows, so dispatch it.
+          state=""
+          for _ in $(seq 1 60); do
+            state=$(gh pr view "$url" --json state --jq .state)
+            [ "$state" = OPEN ] || break
+            sleep 30
+          done
+          test "$state" = MERGED
+          for file in $added; do
+            case "$file" in
+              */core-release-*.json) kind=core; version=${file##*/core-release-} ;;
+              */viewer-release-*.json) kind=viewer; version=${file##*/viewer-release-} ;;
+              *) continue ;;
+            esac
+            gh workflow run consumer-upgrades.yml -f kind="$kind" -f version="${version%.json}"
+          done

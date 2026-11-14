@@ -56,12 +56,18 @@ upgrades omit `--base-ref` and use the default branch.
 
 ## Hosted proposal automation
 
-Since 2026-11-04 the proposal job runs for every receipt that a push to `main`
-adds under `docs/releases/` (viewer and core lanes alike) and creates each
-upgrade PR with Gitea's merge-when-checks-succeed flag. Branch protection on
-every consumer `main` requires the `verify` status, so a proposal merges on its
-own only after the consumer's own checks pass; a failed check leaves the PR open
-for review. The job still never deploys a consumer. The design and rollout order
+Since 2026-11-14 the proposal job is the GitHub workflow `Consumer upgrades`.
+The `Release receipts` workflow dispatches it for each receipt it lands (a merge
+made with the Actions token starts no push workflow), and a receipt merged by a
+person starts it through the push trigger; it can also be dispatched with a lane
+and version. It clones each registered consumer from GitHub (`github_repository`
+names the GitHub copy when the registry keeps an older Gitea path), runs the
+consumer's checks without a test database, pushes the upgrade branch and opens
+the PR with the `ARCHIVE_CONSUMER_TOKEN` repository secret, a fine-grained token
+with contents and pull-request write access to the consumers. Each consumer
+merges a ready PR once its own required checks pass; a failed check leaves it
+open for review. The job never deploys a consumer; a merged upgrade deploys
+through that consumer's own pipeline. The design and rollout order
 are in [plan 0006](../plans/0006-automated-update-and-deploy.md).
 
 Committed receipts under `docs/releases/` bind published registry bytes to their
