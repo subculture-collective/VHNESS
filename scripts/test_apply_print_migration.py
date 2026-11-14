@@ -302,7 +302,8 @@ class FixtureDatabaseTests(unittest.TestCase):
         env = dict(os.environ, DATABASE_URL=os.environ['ARKHIV_TEST_DATABASE_URL'], VHNESS_COLLECTION=COLLECTION,
                    VHNESS_MEDIA=str(archive), VHNESS_DERIVATIVES=str(archive),
                    VHNESS_MIGRATIONS=str(Path(__file__).resolve().parent.parent / 'migrations'))
-        env.pop('ARKHIV_PUBLIC', None)
+        for inherited in ('ARKHIV_PUBLIC', 'DATABASE_URL_FILE'):  # the file would win over the disposable URL
+            env.pop(inherited, None)
         vhness = os.environ['VHNESS_BIN']
         state = PsqlState(['psql'], libpq_env(env))
 
