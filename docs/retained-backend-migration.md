@@ -23,7 +23,10 @@ tracks, reviewed sets, source/taper/transfer credits, original recording identif
 legacy source hashes and the station revision/start/duration/offset/next contract remain
 available. Withdrawal of a future scheduled recording makes the station unavailable;
 on-demand eligibility is independently checked. Conditional and range requests check
-current rights and integrity before responding.
+current rights and integrity before responding. Error responses on the recording,
+station, calendar and date routes keep Dedhed's status codes and wording, because its
+frontend shows them to listeners; a station that cannot play its current recording
+reports that it is off the air.
 
 The migration preparation scripts validate an independently recovered backup before
 writing a new output directory. They keep full donor table exports and source identity
